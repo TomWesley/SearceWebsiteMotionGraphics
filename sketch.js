@@ -93,13 +93,19 @@ let cardImages = [];
 let cards = [];
 let currentState = GRID_STATE;
 let animationProgress = 0;
-let animationSpeed = 0.02; // Very slow for debugging
+let animationSpeed = 0.02;
 let currentActiveCard = 0;
 let previousActiveCard = 0;
 let cardTransitionProgress = 0;
-let cardTransitionPhase = 0; // 0 = slide out, 1 = slide in
-let virtualScrollY = 0; // Virtual scroll position
+let cardTransitionPhase = 0;
 let canvasHeight = 0;
+
+// Discrete scroll system
+let currentScrollPosition = 0; // 0 = grid, 1-8 = individual cards
+let lastScrollTime = 0;
+let scrollDebounceDelay = 400; // Longer delay to prevent multiple inputs
+let scrollBlocked = false; // Flag to completely block input during cooldown
+const totalPositions = 9; // Grid + 8 cards
 
 // Responsive scaling variables
 let baseCardSize = 240;
@@ -403,6 +409,14 @@ function setupCardGrid() {
 function draw() {
     background(248, 249, 250);
     
+    // Handle scroll input unblocking
+    if (scrollBlocked && millis() - lastScrollTime > scrollDebounceDelay) {
+        scrollBlocked = false;
+    }
+    
+    // Handle discrete scroll position changes
+    updateDiscreteScrolling();
+    
     // Update animation progress
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         animationProgress += animationSpeed;
@@ -453,35 +467,60 @@ function draw() {
     // drawDebugInfo();
 }
 
+function updateDiscreteScrolling() {
+    // Handle state transitions based on discrete position
+    if (currentScrollPosition === 0) {
+        // Position 0: Grid view
+        if (currentState === STACKED_STATE) {
+            startTransformToGrid();
+        }
+    } else {
+        // Positions 1-8: Stacked view with specific card active
+        if (currentState === GRID_STATE) {
+            startTransformToStack();
+        }
+        
+        // Update active card based on position
+        const targetCard = currentScrollPosition - 1; // Convert to 0-7 index
+        if (targetCard !== currentActiveCard && cardTransitionProgress >= 1.0) {
+            previousActiveCard = currentActiveCard;
+            currentActiveCard = targetCard;
+            cardTransitionProgress = 0;
+            updateServiceContent(currentActiveCard);
+        }
+    }
+}
+
 function handleWheel(event) {
     // Prevent actual page scrolling
     event.preventDefault();
     
-    // Update virtual scroll position
-    virtualScrollY += event.deltaY * 0.5; // Slower scroll sensitivity
-    virtualScrollY = Math.max(0, Math.min(virtualScrollY, 2000)); // Limit scroll range
-    
-    const triggerPoint = 300; // Trigger 300px into virtual scroll
-    const cardSwitchStart = 600; // Start switching cards at 600px
-    
-    // Transform animation
-    if (virtualScrollY >= triggerPoint && currentState === GRID_STATE) {
-        startTransformToStack();
-    } else if (virtualScrollY < triggerPoint && currentState === STACKED_STATE) {
-        startTransformToGrid();
+    // STRICT INPUT BLOCKING - ignore ALL input if we're in cooldown
+    if (scrollBlocked) {
+        return; // Completely ignore this scroll event
     }
     
-    // Card switching in stacked state
-    if (currentState === STACKED_STATE && virtualScrollY >= cardSwitchStart) {
-        const progress = (virtualScrollY - cardSwitchStart) / 1000; // 1000px range for switching
-        const cardIndex = Math.min(Math.floor(progress * 8), 7);
-        
-        if (cardIndex !== currentActiveCard) {
-            previousActiveCard = currentActiveCard;
-            currentActiveCard = cardIndex;
-            cardTransitionProgress = 0; // Reset transition
-            updateServiceContent(cardIndex);
-        }
+    // Determine scroll direction (ignore magnitude completely)
+    const scrollDirection = event.deltaY > 0 ? 1 : -1;
+    
+    // Update position by exactly one step
+    const newPosition = currentScrollPosition + scrollDirection;
+    
+    // Clamp to valid range (0-8)
+    currentScrollPosition = Math.max(0, Math.min(totalPositions - 1, newPosition));
+    
+    // BLOCK ALL FURTHER INPUT for the debounce period
+    scrollBlocked = true;
+    lastScrollTime = millis();
+    
+    console.log(`Scroll position: ${currentScrollPosition} (${getPositionName()}) - Input blocked for ${scrollDebounceDelay}ms`);
+}
+
+function getPositionName() {
+    if (currentScrollPosition === 0) {
+        return "Grid View";
+    } else {
+        return `Card ${currentScrollPosition}: ${services[currentScrollPosition - 1].title}`;
     }
 }
 
@@ -540,7 +579,7 @@ function updateServiceContent(index) {
 
 function updateScrollIndicator() {
     const progressElement = document.getElementById('scroll-progress');
-    const progress = (virtualScrollY / 2000) * 100; // 2000 is max scroll
+    const progress = (currentScrollPosition / (totalPositions - 1)) * 100; // 0-8 mapped to 0-100%
     progressElement.style.height = `${progress}%`;
 }
 
@@ -550,9 +589,12 @@ function drawDebugInfo() {
     textSize(14);
     text(`State: ${getStateName()}`, 10, 20);
     text(`Animation Progress: ${animationProgress.toFixed(3)}`, 10, 40);
-    text(`Active Card: ${currentActiveCard}`, 10, 60);
-    text(`Virtual Scroll Y: ${virtualScrollY.toFixed(0)}`, 10, 80);
-    text(`Canvas: ${width}x${canvasHeight}`, 10, 100);
+    text(`Scroll Position: ${currentScrollPosition} (${getPositionName()})`, 10, 60);
+    text(`Active Card: ${currentActiveCard}`, 10, 80);
+    text(`Card Transition: ${cardTransitionProgress.toFixed(3)}`, 10, 100);
+    text(`Scroll Blocked: ${scrollBlocked}`, 10, 120);
+    text(`Time until unblock: ${scrollBlocked ? Math.max(0, scrollDebounceDelay - (millis() - lastScrollTime)) : 0}ms`, 10, 140);
+    text(`Canvas: ${width}x${canvasHeight}`, 10, 160);
 }
 
 function getStateName() {
