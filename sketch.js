@@ -556,10 +556,10 @@ function updateServiceContent(index) {
     const service = services[index];
     const contentDiv = document.getElementById('service-content');
     
-    // Add fade out class
+    // Phase 1: Dramatic fade out with staggered timing
     contentDiv.classList.add('fade-out');
     
-    // Wait for fade out, then update content and fade in
+    // Phase 2: Prepare new content with entering position
     setTimeout(() => {
         let featuresHTML = '';
         service.features.forEach(feature => {
@@ -572,9 +572,16 @@ function updateServiceContent(index) {
             <ul>${featuresHTML}</ul>
         `;
         
-        // Remove fade out class to fade in
+        // Set up for dramatic entrance
         contentDiv.classList.remove('fade-out');
-    }, 150); // Half of transition duration for smooth crossfade
+        contentDiv.classList.add('fade-in-prepare');
+        
+        // Phase 3: Dramatic fade in with slight delay
+        setTimeout(() => {
+            contentDiv.classList.remove('fade-in-prepare');
+        }, 50); // Brief pause before entrance
+        
+    }, 300); // Wait for fade out to mostly complete
 }
 
 function updateScrollIndicator() {
