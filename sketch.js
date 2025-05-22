@@ -97,14 +97,29 @@ let animationSpeed = 0.02; // Very slow for debugging
 let currentActiveCard = 0;
 let previousActiveCard = 0;
 let cardTransitionProgress = 0;
+let cardTransitionPhase = 0; // 0 = slide out, 1 = slide in
 let virtualScrollY = 0; // Virtual scroll position
 let canvasHeight = 0;
 
 // Responsive scaling variables
 let baseCardSize = 240;
 let baseTargetSize = 480;
-let scaleFactor = .8;
-let sizeLimit = 1; // **SIZE LIMIT CONTROL** - Maximum scale factor (1.2 = 120% max size)
+let scaleFactor = 1;
+let sizeLimit = 1.2; // **SIZE LIMIT CONTROL** - Maximum scale factor (1.2 = 120% max size)
+
+// Smooth easing functions (Stripe-style)
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function easeOutElastic(t) {
+    const c4 = (2 * Math.PI) / 3;
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+}
 
 function calculateScaleFactor() {
     // Scale based on window width, with reasonable min/max bounds
@@ -131,6 +146,9 @@ class Card {
         this.targetSize = baseTargetSize;
         this.currentSize = this.size;
         this.alpha = 255;
+        this.rotation = 0;
+        this.scale = 1.0;
+        this.elevation = 0; // For shadow/depth effects
     }
     
     updateSizes() {
@@ -179,60 +197,139 @@ class Card {
     }
     
     updateInStack() {
-        // In stacked state, create a card stack effect with responsive sizing
+        // In stacked state, create a sophisticated card stack effect
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         
         this.currentSize = this.targetSize;
         
         if (this.index === currentActiveCard) {
-            // Active card - front and center
+            // Active card - front and center with subtle hover effect
             this.x = baseX;
             this.y = baseY;
             this.alpha = 255;
+            this.rotation = 0;
+            this.scale = 1.0 + Math.sin(millis() * 0.001) * 0.01; // Subtle breathing effect
+            this.elevation = 8;
+            
         } else if (this.index === previousActiveCard && cardTransitionProgress < 1.0) {
-            // Previous card - animate out (responsive to scale)
-            const slideDistance = 80 * scaleFactor;
-            this.x = baseX + (slideDistance * cardTransitionProgress);
-            this.y = baseY - (slideDistance * 0.2 * cardTransitionProgress);
-            this.alpha = 255 * (1 - cardTransitionProgress);
+            // Previous card - sophisticated slide-out with rotation and scale
+            const t = easeInOutCubic(cardTransitionProgress);
+            const slideDistance = 150 * scaleFactor;
+            
+            // Multi-phase animation
+            if (cardTransitionProgress < 0.3) {
+                // Phase 1: Lift and rotate slightly
+                const phase1 = cardTransitionProgress / 0.3;
+                const liftT = easeOutCubic(phase1);
+                this.x = baseX;
+                this.y = baseY - (20 * liftT);
+                this.rotation = -5 * liftT; // Slight rotation
+                this.scale = 1.0 + (0.05 * liftT); // Slight scale up
+                this.alpha = 255;
+                this.elevation = 8 + (4 * liftT);
+                
+            } else if (cardTransitionProgress < 0.8) {
+                // Phase 2: Slide and fade
+                const phase2 = (cardTransitionProgress - 0.3) / 0.5;
+                const slideT = easeInOutCubic(phase2);
+                this.x = baseX + (slideDistance * slideT);
+                this.y = baseY - 20 - (slideDistance * 0.2 * slideT);
+                this.rotation = -5 - (10 * slideT); // More rotation
+                this.scale = 1.05 - (0.3 * slideT); // Scale down
+                this.alpha = 255 * (1 - slideT * 0.7);
+                this.elevation = 12 - (8 * slideT);
+                
+            } else {
+                // Phase 3: Final fade and settle
+                const phase3 = (cardTransitionProgress - 0.8) / 0.2;
+                const fadeT = easeOutCubic(phase3);
+                this.x = baseX + slideDistance;
+                this.y = baseY - 20 - (slideDistance * 0.2);
+                this.rotation = -15;
+                this.scale = 0.75;
+                this.alpha = 255 * 0.3 * (1 - fadeT);
+                this.elevation = 2;
+            }
+            
         } else if (this.index > currentActiveCard) {
-            // Cards ahead in stack - positioned behind and to the right (responsive)
-            const offset = (this.index - currentActiveCard) * 6 * scaleFactor;
-            this.x = baseX + offset;
-            this.y = baseY + offset * 0.3;
-            this.alpha = Math.max(70, 180 - (this.index - currentActiveCard) * 25);
+            // Cards ahead in stack - layered with subtle perspective
+            const offset = (this.index - currentActiveCard);
+            const stackOffset = offset * 8 * scaleFactor;
+            const depthOffset = offset * 3 * scaleFactor;
+            
+            this.x = baseX + stackOffset;
+            this.y = baseY + depthOffset;
+            this.rotation = offset * 1.5; // Slight rotation for depth
+            this.scale = 1.0 - (offset * 0.03); // Subtle scale difference
+            this.alpha = Math.max(60, 180 - (offset * 25));
+            this.elevation = Math.max(1, 6 - offset);
+            
         } else {
-            // Cards already shown - positioned behind and to the left (responsive)
-            const offset = (currentActiveCard - this.index) * 4 * scaleFactor;
-            this.x = baseX - offset;
-            this.y = baseY + offset * 0.2;
-            this.alpha = Math.max(50, 120 - (currentActiveCard - this.index) * 15);
+            // Cards already shown - settled stack with gentle placement
+            const offset = (currentActiveCard - this.index);
+            const stackOffset = offset * 5 * scaleFactor;
+            const depthOffset = offset * 2 * scaleFactor;
+            
+            this.x = baseX - stackOffset;
+            this.y = baseY + depthOffset;
+            this.rotation = -offset * 1; // Opposite rotation
+            this.scale = 1.0 - (offset * 0.02);
+            this.alpha = Math.max(40, 120 - (offset * 15));
+            this.elevation = Math.max(0, 4 - offset);
         }
     }
     
     draw() {
         push();
-        translate(this.x, this.y);
         
-        // Add shadow effect for depth
-        if (currentState === STACKED_STATE) {
-            // Draw shadow
-            push();
-            translate(5, 5);
-            fill(0, 0, 0, 30);
-            noStroke();
-            rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
-            pop();
+        // Apply sophisticated transforms
+        translate(this.x, this.y);
+        rotate(radians(this.rotation));
+        scale(this.scale);
+        
+        // Enhanced shadow effect based on elevation
+        if (currentState === STACKED_STATE && this.elevation > 0) {
+            // Multiple shadow layers for depth
+            for (let i = 0; i < 3; i++) {
+                push();
+                const shadowOffset = (this.elevation / 3) * (i + 1);
+                const shadowAlpha = (30 - i * 8) * (this.elevation / 8);
+                translate(shadowOffset * 0.7, shadowOffset);
+                fill(0, 0, 0, shadowAlpha * (this.alpha / 255));
+                noStroke();
+                rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+                pop();
+            }
         }
         
-        // Draw white background
-        fill(255, this.alpha);
-        stroke(0, 0, 0, 50);
-        strokeWeight(2);
-        rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+        // Card background with subtle gradient effect
+        if (this.index === currentActiveCard && currentState === STACKED_STATE) {
+            // Active card gets a subtle gradient
+            drawingContext.save();
+            const gradient = drawingContext.createLinearGradient(
+                -this.currentSize/2, -this.currentSize/2,
+                this.currentSize/2, this.currentSize/2
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.alpha / 255})`);
+            gradient.addColorStop(1, `rgba(248, 250, 252, ${this.alpha / 255})`);
+            drawingContext.fillStyle = gradient;
+            drawingContext.strokeStyle = `rgba(0, 0, 0, ${50 * (this.alpha / 255)})`;
+            drawingContext.lineWidth = 2;
+            drawingContext.beginPath();
+            drawingContext.roundRect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+            drawingContext.fill();
+            drawingContext.stroke();
+            drawingContext.restore();
+        } else {
+            // Standard card background
+            fill(255, this.alpha);
+            stroke(0, 0, 0, 50 * (this.alpha / 255));
+            strokeWeight(2);
+            rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+        }
         
-        // Draw image
+        // Draw image with proper tinting
         if (this.img) {
             tint(255, this.alpha);
             image(this.img, -this.currentSize/2, -this.currentSize/2, 
@@ -324,9 +421,9 @@ function draw() {
         }
     }
     
-    // Update card transition progress
+    // Update card transition progress with sophisticated timing
     if (cardTransitionProgress < 1.0) {
-        cardTransitionProgress += 0.03; // Slower card transitions
+        cardTransitionProgress += 0.012; // Much slower, more elegant transitions
         if (cardTransitionProgress >= 1.0) {
             cardTransitionProgress = 1.0;
         }
@@ -404,6 +501,14 @@ function startTransformToGrid() {
     currentActiveCard = 0;
     previousActiveCard = 0;
     cardTransitionProgress = 1.0;
+    
+    // Reset all card animation properties
+    for (let card of cards) {
+        card.rotation = 0;
+        card.scale = 1.0;
+        card.elevation = 0;
+    }
+    
     updateServiceContent(0);
     console.log('Starting transform to grid');
 }
