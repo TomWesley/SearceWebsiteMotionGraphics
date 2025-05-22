@@ -93,12 +93,30 @@ let cardImages = [];
 let cards = [];
 let currentState = GRID_STATE;
 let animationProgress = 0;
-let animationSpeed = 0.025; // Very slow for debugging
+let animationSpeed = 0.02; // Very slow for debugging
 let currentActiveCard = 0;
 let previousActiveCard = 0;
 let cardTransitionProgress = 0;
 let virtualScrollY = 0; // Virtual scroll position
 let canvasHeight = 0;
+
+// Responsive scaling variables
+let baseCardSize = 240;
+let baseTargetSize = 480;
+let scaleFactor = .8;
+let sizeLimit = 1; // **SIZE LIMIT CONTROL** - Maximum scale factor (1.2 = 120% max size)
+
+function calculateScaleFactor() {
+    // Scale based on window width, with reasonable min/max bounds
+    const baseWidth = 1200; // Reference width
+    const rawScale = windowWidth / baseWidth;
+    
+    // Apply size limit as maximum constraint
+    scaleFactor = Math.max(0.6, Math.min(sizeLimit, rawScale));
+    
+    baseCardSize = 240 * scaleFactor;
+    baseTargetSize = 480 * scaleFactor;
+}
 
 // Card class
 class Card {
@@ -109,10 +127,21 @@ class Card {
         this.y = y;
         this.img = img;
         this.index = index;
-        this.size = 240; // Original size
-        this.targetSize = 480; // Target size when stacked
+        this.size = baseCardSize;
+        this.targetSize = baseTargetSize;
         this.currentSize = this.size;
         this.alpha = 255;
+    }
+    
+    updateSizes() {
+        // Update sizes when scale factor changes
+        this.size = baseCardSize;
+        this.targetSize = baseTargetSize;
+        if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
+            this.currentSize = this.targetSize;
+        } else {
+            this.currentSize = this.size;
+        }
     }
     
     update() {
@@ -150,7 +179,7 @@ class Card {
     }
     
     updateInStack() {
-        // In stacked state, create a card stack effect
+        // In stacked state, create a card stack effect with responsive sizing
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         
@@ -162,20 +191,20 @@ class Card {
             this.y = baseY;
             this.alpha = 255;
         } else if (this.index === previousActiveCard && cardTransitionProgress < 1.0) {
-            // Previous card - animate out (much tighter)
-            const slideDistance = 80;
+            // Previous card - animate out (responsive to scale)
+            const slideDistance = 80 * scaleFactor;
             this.x = baseX + (slideDistance * cardTransitionProgress);
             this.y = baseY - (slideDistance * 0.2 * cardTransitionProgress);
             this.alpha = 255 * (1 - cardTransitionProgress);
         } else if (this.index > currentActiveCard) {
-            // Cards ahead in stack - positioned behind and to the right (tighter)
-            const offset = (this.index - currentActiveCard) * 6;
+            // Cards ahead in stack - positioned behind and to the right (responsive)
+            const offset = (this.index - currentActiveCard) * 6 * scaleFactor;
             this.x = baseX + offset;
             this.y = baseY + offset * 0.3;
             this.alpha = Math.max(70, 180 - (this.index - currentActiveCard) * 25);
         } else {
-            // Cards already shown - positioned behind and to the left (tighter)
-            const offset = (currentActiveCard - this.index) * 4;
+            // Cards already shown - positioned behind and to the left (responsive)
+            const offset = (currentActiveCard - this.index) * 4 * scaleFactor;
             this.x = baseX - offset;
             this.y = baseY + offset * 0.2;
             this.alpha = Math.max(50, 120 - (currentActiveCard - this.index) * 15);
@@ -226,6 +255,9 @@ function setup() {
     // Calculate canvas height (viewport minus header)
     canvasHeight = window.innerHeight - 120; // 120px header height
     
+    // Calculate responsive scale factor
+    calculateScaleFactor();
+    
     // Create canvas that fills width and calculated height
     const canvas = createCanvas(windowWidth, canvasHeight);
     canvas.parent('canvas-container');
@@ -239,8 +271,14 @@ function setup() {
     // Setup resize listener
     window.addEventListener('resize', () => {
         canvasHeight = window.innerHeight - 120;
+        calculateScaleFactor(); // Recalculate scale
         resizeCanvas(windowWidth, canvasHeight);
         setupCardGrid(); // Recalculate positions
+        
+        // Update existing card sizes
+        for (let card of cards) {
+            card.updateSizes();
+        }
     });
     
     // Initialize service content
@@ -249,7 +287,7 @@ function setup() {
 
 function setupCardGrid() {
     cards = [];
-    const cardSpacing = 350;
+    const cardSpacing = 350 * scaleFactor; // Responsive spacing
     const gridWidth = 4 * cardSpacing;
     const gridHeight = 2 * cardSpacing;
     const startX = width / 2 - gridWidth / 2 + cardSpacing / 2;
@@ -424,6 +462,12 @@ function getStateName() {
 
 function windowResized() {
     canvasHeight = window.innerHeight - 120;
+    calculateScaleFactor(); // Recalculate responsive scaling
     resizeCanvas(windowWidth, canvasHeight);
     setupCardGrid();
+    
+    // Update existing card sizes
+    for (let card of cards) {
+        card.updateSizes();
+    }
 }
