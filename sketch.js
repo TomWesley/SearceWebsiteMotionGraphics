@@ -199,11 +199,31 @@ class Card {
             return;
         }
         
-        // Target position with slight magnetic clustering
-        const magneticOffset = (this.index % 4 - 1.5) * 8; // Tighter clustering
-        const verticalOffset = (Math.floor(this.index / 4) - 0.5) * 6;
-        const targetX = width * 0.25 + magneticOffset;
-        const targetY = canvasHeight * 0.5 + verticalOffset;
+        // Target position - match exactly what the stack state will use
+        const baseX = width * 0.25;
+        const baseY = canvasHeight * 0.5;
+        let targetX, targetY;
+        
+        // Calculate target position based on what this card's final stack position will be
+        if (this.index === currentActiveCard) {
+            // Active card goes to exact center
+            targetX = baseX;
+            targetY = baseY;
+        } else if (this.index > currentActiveCard) {
+            // Cards ahead in stack - positioned behind and to the right
+            const offset = (this.index - currentActiveCard);
+            const stackOffset = offset * 8 * scaleFactor;
+            const depthOffset = offset * 3 * scaleFactor;
+            targetX = baseX + stackOffset;
+            targetY = baseY + depthOffset;
+        } else {
+            // Cards already shown - positioned behind and to the left
+            const offset = (currentActiveCard - this.index);
+            const stackOffset = offset * 5 * scaleFactor;
+            const depthOffset = offset * 2 * scaleFactor;
+            targetX = baseX - stackOffset;
+            targetY = baseY + depthOffset;
+        }
         
         // Apple-style curved path animation using bezier-like easing
         const t = easeInOutCubic(adjustedProgress);
@@ -588,9 +608,7 @@ function draw() {
     }
     
     // Draw connecting lines during major transitions (Apple-style)
-    // if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
-    //     drawConnectionLines();
-    // }
+  
     
     // Sort cards for proper drawing order
     let sortedCards = [...cards];
