@@ -93,7 +93,7 @@ let cardImages = [];
 let cards = [];
 let currentState = GRID_STATE;
 let animationProgress = 0;
-let animationSpeed = 0.02;
+let animationSpeed = 0.015; // Slower for more premium feel
 let currentActiveCard = 0;
 let previousActiveCard = 0;
 let cardTransitionProgress = 0;
@@ -113,20 +113,6 @@ let baseTargetSize = 480;
 let scaleFactor = 1;
 let sizeLimit = 1.2; // **SIZE LIMIT CONTROL** - Maximum scale factor (1.2 = 120% max size)
 
-// Smooth easing functions (Stripe-style)
-function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-}
-
-function easeInOutCubic(t) {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function easeOutElastic(t) {
-    const c4 = (2 * Math.PI) / 3;
-    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-}
-
 function calculateScaleFactor() {
     // Scale based on window width, with reasonable min/max bounds
     const baseWidth = 1200; // Reference width
@@ -137,6 +123,26 @@ function calculateScaleFactor() {
     
     baseCardSize = 240 * scaleFactor;
     baseTargetSize = 480 * scaleFactor;
+}
+
+// Smooth easing functions (Apple-style)
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function easeOutElastic(t) {
+    // More subtle elastic for Apple-like premium feel
+    const c4 = (2 * Math.PI) / 4.5; // Less bouncy
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -8 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+}
+
+function easeInOutQuart(t) {
+    // Apple's signature easing curve
+    return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 }
 
 // Card class
@@ -155,6 +161,9 @@ class Card {
         this.rotation = 0;
         this.scale = 1.0;
         this.elevation = 0; // For shadow/depth effects
+        this.glowIntensity = 0; // For transition glow effects
+        this.trailPositions = []; // For motion trails
+        this.animationDelay = 0; // Staggered animation timing
     }
     
     updateSizes() {
@@ -180,26 +189,94 @@ class Card {
     }
     
     animateToStack() {
-        // Target position: 25% width, 50% height with slight offsets
-        const targetX = width * 0.25 + (this.index % 4 - 1.5) * 15;
-        const targetY = canvasHeight * 0.5 + (Math.floor(this.index / 4) - 0.5) * 15;
+        // Calculate staggered animation delay (Apple-style cascading)
+        const baseDelay = this.index * 0.08; // 80ms stagger between cards
+        const adjustedProgress = Math.max(0, Math.min(1, (animationProgress - baseDelay) / (1 - baseDelay)));
         
-        // Lerp to target position and size
-        this.x = lerp(this.startX, targetX, animationProgress);
-        this.y = lerp(this.startY, targetY, animationProgress);
-        this.currentSize = lerp(this.size, this.targetSize, animationProgress);
-        this.alpha = lerp(255, 200, animationProgress);
+        if (adjustedProgress <= 0) {
+            // Card hasn't started animating yet
+            this.glowIntensity = 0;
+            return;
+        }
+        
+        // Target position with slight magnetic clustering
+        const magneticOffset = (this.index % 4 - 1.5) * 8; // Tighter clustering
+        const verticalOffset = (Math.floor(this.index / 4) - 0.5) * 6;
+        const targetX = width * 0.25 + magneticOffset;
+        const targetY = canvasHeight * 0.5 + verticalOffset;
+        
+        // Apple-style curved path animation using bezier-like easing
+        const t = easeInOutCubic(adjustedProgress);
+        
+        // Create curved trajectory (not straight line)
+        const midPointX = (this.startX + targetX) / 2 + Math.sin(adjustedProgress * Math.PI) * 40;
+        const midPointY = (this.startY + targetY) / 2 - Math.abs(Math.sin(adjustedProgress * Math.PI)) * 60;
+        
+        // Bezier curve animation
+        this.x = lerp(lerp(this.startX, midPointX, t), lerp(midPointX, targetX, t), t);
+        this.y = lerp(lerp(this.startY, midPointY, t), lerp(midPointY, targetY, t), t);
+        
+        // Very gentle, slow size animation
+        if (adjustedProgress < 0.25) {
+            // Keep original size for first 25% of animation
+            this.currentSize = this.size;
+        } else {
+            // Very gradual size increase over remaining 75%
+            const sizeProgress = (adjustedProgress - 0.25) / 0.75; // 0 to 1 over final 75%
+            const veryGentleEasing = easeInOutQuart(sizeProgress * sizeProgress); // Even slower curve
+            this.currentSize = lerp(this.size, this.targetSize, veryGentleEasing * 0.6); // Very subtle scaling
+        }
+        
+        // Smoother visual effects
+        this.alpha = lerp(255, 240, t * 0.5); // Very subtle alpha change
+        this.rotation = Math.sin(adjustedProgress * Math.PI) * 2; // Minimal rotation
+        this.scale = 1.0 + Math.sin(adjustedProgress * Math.PI) * 0.01; // Barely noticeable breathing
+        this.elevation = adjustedProgress * 6; // Minimal elevation
+        
+        // Very gentle glowing effect
+        this.glowIntensity = Math.sin(adjustedProgress * Math.PI) * 30; // Subtle glow
+        
+        // Store trail positions for motion blur effect
+        if (this.trailPositions.length > 5) this.trailPositions.shift();
+        this.trailPositions.push({x: this.x, y: this.y, alpha: this.glowIntensity});
     }
     
     animateToGrid() {
-        // Animate back to original position
-        const targetX = width * 0.25 + (this.index % 4 - 1.5) * 15;
-        const targetY = canvasHeight * 0.5 + (Math.floor(this.index / 4) - 0.5) * 15;
+        // Reverse animation with similar sophistication
+        const baseDelay = (7 - this.index) * 0.05; // Reverse stagger
+        const adjustedProgress = Math.max(0, Math.min(1, (animationProgress - baseDelay) / (1 - baseDelay)));
         
-        this.x = lerp(targetX, this.startX, animationProgress);
-        this.y = lerp(targetY, this.startY, animationProgress);
-        this.currentSize = lerp(this.targetSize, this.size, animationProgress);
-        this.alpha = lerp(200, 255, animationProgress);
+        if (adjustedProgress <= 0) {
+            this.glowIntensity = 0;
+            return;
+        }
+        
+        const magneticOffset = (this.index % 4 - 1.5) * 8;
+        const verticalOffset = (Math.floor(this.index / 4) - 0.5) * 6;
+        const startStackX = width * 0.25 + magneticOffset;
+        const startStackY = canvasHeight * 0.5 + verticalOffset;
+        
+        const t = easeInOutCubic(adjustedProgress);
+        const curveT = easeOutCubic(adjustedProgress);
+        
+        // Curved return path
+        const midPointX = (startStackX + this.startX) / 2 - Math.sin(adjustedProgress * Math.PI) * 50;
+        const midPointY = (startStackY + this.startY) / 2 - Math.abs(Math.sin(adjustedProgress * Math.PI)) * 80;
+        
+        this.x = lerp(lerp(startStackX, midPointX, t), lerp(midPointX, this.startX, t), t);
+        this.y = lerp(lerp(startStackY, midPointY, t), lerp(midPointY, this.startY, t), t);
+        
+        this.currentSize = lerp(this.targetSize, this.size, curveT);
+        this.alpha = lerp(220, 255, t);
+        this.rotation = -Math.sin(adjustedProgress * Math.PI) * 6;
+        this.scale = 1.0 + Math.sin(adjustedProgress * Math.PI) * 0.03;
+        this.elevation = (1 - adjustedProgress) * 10;
+        
+        this.glowIntensity = Math.sin(adjustedProgress * Math.PI) * 60;
+        
+        // Trail effect
+        if (this.trailPositions.length > 5) this.trailPositions.shift();
+        this.trailPositions.push({x: this.x, y: this.y, alpha: this.glowIntensity});
     }
     
     updateInStack() {
@@ -289,57 +366,119 @@ class Card {
     draw() {
         push();
         
-        // Apply sophisticated transforms
-        translate(this.x, this.y);
-        rotate(radians(this.rotation));
-        scale(this.scale);
-        
-        // Enhanced shadow effect based on elevation
-        if (currentState === STACKED_STATE && this.elevation > 0) {
-            // Multiple shadow layers for depth
-            for (let i = 0; i < 3; i++) {
+        // Draw motion trails during transitions (Apple-style motion blur)
+        if (this.trailPositions.length > 1 && this.glowIntensity > 10) {
+            for (let i = 0; i < this.trailPositions.length - 1; i++) {
+                const trail = this.trailPositions[i];
+                const trailAlpha = (trail.alpha * (i / this.trailPositions.length)) * 0.3;
+                
                 push();
-                const shadowOffset = (this.elevation / 3) * (i + 1);
-                const shadowAlpha = (30 - i * 8) * (this.elevation / 8);
-                translate(shadowOffset * 0.7, shadowOffset);
-                fill(0, 0, 0, shadowAlpha * (this.alpha / 255));
+                translate(trail.x, trail.y);
+                
+                // Glowing trail effect
+                drawingContext.save();
+                drawingContext.shadowColor = 'rgba(102, 126, 234, 0.4)';
+                drawingContext.shadowBlur = 15;
+                fill(102, 126, 234, trailAlpha);
                 noStroke();
-                rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+                const trailSize = this.currentSize * (0.8 + i * 0.05);
+                rect(-trailSize/2, -trailSize/2, trailSize, trailSize, 12);
+                drawingContext.restore();
+                
                 pop();
             }
         }
         
-        // Card background with subtle gradient effect
+        // Main card transforms
+        translate(this.x, this.y);
+        rotate(radians(this.rotation));
+        scale(this.scale);
+        
+        // Premium multi-layered shadows with elevation
+        if (this.elevation > 0) {
+            const shadowLayers = Math.min(4, Math.ceil(this.elevation / 3));
+            for (let i = 0; i < shadowLayers; i++) {
+                push();
+                const shadowOffset = (this.elevation / shadowLayers) * (i + 1) * 0.8;
+                const shadowSize = this.currentSize + (i * 2);
+                const shadowAlpha = (40 - i * 8) * (this.alpha / 255) * (this.elevation / 12);
+                
+                translate(shadowOffset * 0.6, shadowOffset);
+                fill(0, 0, 0, shadowAlpha);
+                noStroke();
+                rect(-shadowSize/2, -shadowSize/2, shadowSize, shadowSize, 15);
+                pop();
+            }
+        }
+        
+        // Outer glow effect during transitions
+        if (this.glowIntensity > 5) {
+            push();
+            drawingContext.save();
+            drawingContext.shadowColor = `rgba(102, 126, 234, ${this.glowIntensity / 200})`;
+            drawingContext.shadowBlur = this.glowIntensity / 2;
+            
+            // Multiple glow layers for depth
+            for (let i = 0; i < 3; i++) {
+                const glowSize = this.currentSize + (i * 8);
+                const glowAlpha = (this.glowIntensity / 3) * (3 - i);
+                fill(102, 126, 234, glowAlpha * 0.1);
+                noStroke();
+                rect(-glowSize/2, -glowSize/2, glowSize, glowSize, 18);
+            }
+            drawingContext.restore();
+            pop();
+        }
+        
+        // Premium card background with subtle gradient
         if (this.index === currentActiveCard && currentState === STACKED_STATE) {
-            // Active card gets a subtle gradient
+            // Active card gets premium treatment
             drawingContext.save();
             const gradient = drawingContext.createLinearGradient(
                 -this.currentSize/2, -this.currentSize/2,
                 this.currentSize/2, this.currentSize/2
             );
             gradient.addColorStop(0, `rgba(255, 255, 255, ${this.alpha / 255})`);
+            gradient.addColorStop(0.5, `rgba(250, 252, 255, ${this.alpha / 255})`);
             gradient.addColorStop(1, `rgba(248, 250, 252, ${this.alpha / 255})`);
+            
             drawingContext.fillStyle = gradient;
-            drawingContext.strokeStyle = `rgba(0, 0, 0, ${50 * (this.alpha / 255)})`;
+            drawingContext.strokeStyle = `rgba(102, 126, 234, ${Math.min(100, 50 + this.glowIntensity/4) * (this.alpha / 255)})`;
             drawingContext.lineWidth = 2;
+            drawingContext.shadowColor = 'rgba(102, 126, 234, 0.2)';
+            drawingContext.shadowBlur = 8;
             drawingContext.beginPath();
             drawingContext.roundRect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
             drawingContext.fill();
             drawingContext.stroke();
             drawingContext.restore();
         } else {
-            // Standard card background
+            // Standard cards with subtle enhancement during transitions
+            const borderGlow = this.glowIntensity > 5 ? this.glowIntensity / 4 : 0;
             fill(255, this.alpha);
-            stroke(0, 0, 0, 50 * (this.alpha / 255));
-            strokeWeight(2);
+            stroke(102, 126, 234, Math.min(100, 50 + borderGlow) * (this.alpha / 255));
+            strokeWeight(1 + (this.glowIntensity / 40));
             rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
         }
         
-        // Draw image with proper tinting
+        // Card image with subtle effects
         if (this.img) {
-            tint(255, this.alpha);
-            image(this.img, -this.currentSize/2, -this.currentSize/2, 
-                  this.currentSize, this.currentSize);
+            // Add subtle brightness increase during transitions
+            const brightnessBoost = this.glowIntensity > 5 ? 1.1 : 1.0;
+            tint(255 * brightnessBoost, this.alpha);
+            
+            // Subtle image glow during transitions
+            if (this.glowIntensity > 10) {
+                drawingContext.save();
+                drawingContext.shadowColor = 'rgba(102, 126, 234, 0.3)';
+                drawingContext.shadowBlur = this.glowIntensity / 8;
+                image(this.img, -this.currentSize/2, -this.currentSize/2, 
+                      this.currentSize, this.currentSize);
+                drawingContext.restore();
+            } else {
+                image(this.img, -this.currentSize/2, -this.currentSize/2, 
+                      this.currentSize, this.currentSize);
+            }
             noTint();
         }
         
@@ -407,7 +546,12 @@ function setupCardGrid() {
 }
 
 function draw() {
-    background(248, 249, 250);
+    // Dark theme background
+    if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+        drawPremiumBackground();
+    } else {
+        background(0, 22, 48); // #001630
+    }
     
     // Handle scroll input unblocking
     if (scrollBlocked && millis() - lastScrollTime > scrollDebounceDelay) {
@@ -443,6 +587,11 @@ function draw() {
         }
     }
     
+    // Draw connecting lines during major transitions (Apple-style)
+    if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+        drawConnectionLines();
+    }
+    
     // Sort cards for proper drawing order in stack
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
@@ -460,11 +609,97 @@ function draw() {
         card.draw();
     }
     
+    // Draw ambient particles during transitions
+    if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+        drawAmbientParticles();
+    }
+    
     // Update scroll progress indicator
     updateScrollIndicator();
     
     // Debug info
     // drawDebugInfo();
+}
+
+function drawPremiumBackground() {
+    // Dark theme animated gradient background during transitions
+    const gradientIntensity = Math.sin(animationProgress * Math.PI);
+    
+    drawingContext.save();
+    const gradient = drawingContext.createLinearGradient(0, 0, width, canvasHeight);
+    gradient.addColorStop(0, `rgba(0, 22, 48, 1)`);
+    gradient.addColorStop(0.5, `rgba(0, 28, 56, 1)`);
+    gradient.addColorStop(1, `rgba(0, 18, 42, 1)`);
+    
+    drawingContext.fillStyle = gradient;
+    drawingContext.fillRect(0, 0, width, canvasHeight);
+    
+    // Subtle radial glow from center during animation
+    const centerX = width * 0.5;
+    const centerY = canvasHeight * 0.5;
+    const radialGradient = drawingContext.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, Math.max(width, canvasHeight) * 0.6
+    );
+    radialGradient.addColorStop(0, `rgba(102, 126, 234, ${0.05 * gradientIntensity})`);
+    radialGradient.addColorStop(1, `rgba(102, 126, 234, 0)`);
+    
+    drawingContext.fillStyle = radialGradient;
+    drawingContext.fillRect(0, 0, width, canvasHeight);
+    drawingContext.restore();
+}
+
+function drawConnectionLines() {
+    // Apple-style connecting lines between cards during transition
+    const lineAlpha = Math.sin(animationProgress * Math.PI) * 40;
+    const targetX = width * 0.25;
+    const targetY = canvasHeight * 0.5;
+    
+    stroke(102, 126, 234, lineAlpha);
+    strokeWeight(1);
+    
+    // Draw elegant curved lines from each card to the center
+    for (let card of cards) {
+        if (card.glowIntensity > 5) {
+            push();
+            
+            // Curved line using bezier-like approach
+            const midX = (card.x + targetX) / 2;
+            const midY = (card.y + targetY) / 2 - 30;
+            
+            drawingContext.save();
+            drawingContext.strokeStyle = `rgba(102, 126, 234, ${lineAlpha / 255})`;
+            drawingContext.lineWidth = 1;
+            drawingContext.beginPath();
+            drawingContext.moveTo(card.x, card.y);
+            drawingContext.quadraticCurveTo(midX, midY, targetX, targetY);
+            drawingContext.stroke();
+            drawingContext.restore();
+            
+            pop();
+        }
+    }
+}
+
+function drawAmbientParticles() {
+    // Subtle floating particles during transitions (Apple-style ambient effect)
+    const particleCount = 8;
+    const particleAlpha = Math.sin(animationProgress * Math.PI) * 30;
+    
+    fill(102, 126, 234, particleAlpha);
+    noStroke();
+    
+    for (let i = 0; i < particleCount; i++) {
+        const time = millis() * 0.001 + i * 0.5;
+        const x = width * 0.25 + Math.sin(time * 0.8) * 100;
+        const y = canvasHeight * 0.5 + Math.cos(time * 0.6) * 80;
+        const size = 2 + Math.sin(time * 2) * 1;
+        
+        push();
+        translate(x, y);
+        circle(0, 0, size);
+        pop();
+    }
 }
 
 function updateDiscreteScrolling() {
@@ -529,7 +764,15 @@ function startTransformToStack() {
     
     currentState = ANIMATING_TO_STACK;
     animationProgress = 0;
-    console.log('Starting transform to stack');
+    
+    // Initialize premium animation properties
+    for (let card of cards) {
+        card.glowIntensity = 0;
+        card.trailPositions = [];
+        card.animationDelay = card.index * 0.08;
+    }
+    
+    console.log('Starting premium transform to stack');
 }
 
 function startTransformToGrid() {
@@ -541,15 +784,17 @@ function startTransformToGrid() {
     previousActiveCard = 0;
     cardTransitionProgress = 1.0;
     
-    // Reset all card animation properties
+    // Reset all premium card animation properties
     for (let card of cards) {
         card.rotation = 0;
         card.scale = 1.0;
         card.elevation = 0;
+        card.glowIntensity = 0;
+        card.trailPositions = [];
     }
     
     updateServiceContent(0);
-    console.log('Starting transform to grid');
+    console.log('Starting premium transform to grid');
 }
 
 function updateServiceContent(index) {
