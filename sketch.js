@@ -216,15 +216,15 @@ class Card {
         this.x = lerp(lerp(this.startX, midPointX, t), lerp(midPointX, targetX, t), t);
         this.y = lerp(lerp(this.startY, midPointY, t), lerp(midPointY, targetY, t), t);
         
-        // Very gentle, slow size animation
-        if (adjustedProgress < 0.25) {
-            // Keep original size for first 25% of animation
+        // Seamless size animation that reaches full target size
+        if (adjustedProgress < 0.4) {
+            // Keep original size for first 40% of animation
             this.currentSize = this.size;
         } else {
-            // Very gradual size increase over remaining 75%
-            const sizeProgress = (adjustedProgress - 0.25) / 0.75; // 0 to 1 over final 75%
-            const veryGentleEasing = easeInOutQuart(sizeProgress * sizeProgress); // Even slower curve
-            this.currentSize = lerp(this.size, this.targetSize, veryGentleEasing * 0.6); // Very subtle scaling
+            // Gradual size increase over remaining 60% to reach FULL target size
+            const sizeProgress = (adjustedProgress - 0.4) / 0.6; // 0 to 1 over final 60%
+            const seamlessEasing = easeInOutQuart(sizeProgress * sizeProgress); // Smooth curve
+            this.currentSize = lerp(this.size, this.targetSize, seamlessEasing); // Full scaling to target
         }
         
         // Smoother visual effects
@@ -588,11 +588,11 @@ function draw() {
     }
     
     // Draw connecting lines during major transitions (Apple-style)
-    if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
-        drawConnectionLines();
-    }
+    // if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+    //     drawConnectionLines();
+    // }
     
-    // Sort cards for proper drawing order in stack
+    // Sort cards for proper drawing order
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
         // Draw cards in reverse order so active card appears on top
@@ -600,6 +600,13 @@ function draw() {
             if (a.index === currentActiveCard) return 1;
             if (b.index === currentActiveCard) return -1;
             return a.index - b.index;
+        });
+    } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+        // During transitions, draw card 0 (top-left) last so it appears on top
+        sortedCards.sort((a, b) => {
+            if (a.index === 0) return 1; // Card 0 drawn last (on top)
+            if (b.index === 0) return -1;
+            return a.index - b.index; // Others in normal order
         });
     }
     
