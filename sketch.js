@@ -93,8 +93,10 @@ let cardImages = [];
 let cards = [];
 let currentState = GRID_STATE;
 let animationProgress = 0;
-let animationSpeed = 0.02; // Very slow for debugging
+let animationSpeed = 0.025; // Very slow for debugging
 let currentActiveCard = 0;
+let previousActiveCard = 0;
+let cardTransitionProgress = 0;
 let virtualScrollY = 0; // Virtual scroll position
 let canvasHeight = 0;
 
@@ -148,19 +150,35 @@ class Card {
     }
     
     updateInStack() {
-        // In stacked state, maintain target position with active card highlighted
-        const targetX = width * 0.25;
-        const targetY = canvasHeight * 0.5;
+        // In stacked state, create a card stack effect
+        const baseX = width * 0.25;
+        const baseY = canvasHeight * 0.5;
         
-        this.x = targetX;
-        this.y = targetY;
         this.currentSize = this.targetSize;
         
-        // Active card is fully opaque, others are faded
         if (this.index === currentActiveCard) {
+            // Active card - front and center
+            this.x = baseX;
+            this.y = baseY;
             this.alpha = 255;
+        } else if (this.index === previousActiveCard && cardTransitionProgress < 1.0) {
+            // Previous card - animate out (much tighter)
+            const slideDistance = 80;
+            this.x = baseX + (slideDistance * cardTransitionProgress);
+            this.y = baseY - (slideDistance * 0.2 * cardTransitionProgress);
+            this.alpha = 255 * (1 - cardTransitionProgress);
+        } else if (this.index > currentActiveCard) {
+            // Cards ahead in stack - positioned behind and to the right (tighter)
+            const offset = (this.index - currentActiveCard) * 6;
+            this.x = baseX + offset;
+            this.y = baseY + offset * 0.3;
+            this.alpha = Math.max(70, 180 - (this.index - currentActiveCard) * 25);
         } else {
-            this.alpha = 100;
+            // Cards already shown - positioned behind and to the left (tighter)
+            const offset = (currentActiveCard - this.index) * 4;
+            this.x = baseX - offset;
+            this.y = baseY + offset * 0.2;
+            this.alpha = Math.max(50, 120 - (currentActiveCard - this.index) * 15);
         }
     }
     
@@ -168,15 +186,26 @@ class Card {
         push();
         translate(this.x, this.y);
         
+        // Add shadow effect for depth
+        if (currentState === STACKED_STATE) {
+            // Draw shadow
+            push();
+            translate(5, 5);
+            fill(0, 0, 0, 30);
+            noStroke();
+            rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+            pop();
+        }
+        
         // Draw white background
         fill(255, this.alpha);
         stroke(0, 0, 0, 50);
         strokeWeight(2);
-        // rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
+        rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
         
         // Draw image
         if (this.img) {
-            tint(255, 255);
+            tint(255, this.alpha);
             image(this.img, -this.currentSize/2, -this.currentSize/2, 
                   this.currentSize, this.currentSize);
             noTint();
@@ -257,8 +286,27 @@ function draw() {
         }
     }
     
+    // Update card transition progress
+    if (cardTransitionProgress < 1.0) {
+        cardTransitionProgress += 0.03; // Slower card transitions
+        if (cardTransitionProgress >= 1.0) {
+            cardTransitionProgress = 1.0;
+        }
+    }
+    
+    // Sort cards for proper drawing order in stack
+    let sortedCards = [...cards];
+    if (currentState === STACKED_STATE) {
+        // Draw cards in reverse order so active card appears on top
+        sortedCards.sort((a, b) => {
+            if (a.index === currentActiveCard) return 1;
+            if (b.index === currentActiveCard) return -1;
+            return a.index - b.index;
+        });
+    }
+    
     // Update and draw cards
-    for (let card of cards) {
+    for (let card of sortedCards) {
         card.update();
         card.draw();
     }
@@ -294,7 +342,9 @@ function handleWheel(event) {
         const cardIndex = Math.min(Math.floor(progress * 8), 7);
         
         if (cardIndex !== currentActiveCard) {
+            previousActiveCard = currentActiveCard;
             currentActiveCard = cardIndex;
+            cardTransitionProgress = 0; // Reset transition
             updateServiceContent(cardIndex);
         }
     }
@@ -314,6 +364,8 @@ function startTransformToGrid() {
     currentState = ANIMATING_TO_GRID;
     animationProgress = 0;
     currentActiveCard = 0;
+    previousActiveCard = 0;
+    cardTransitionProgress = 1.0;
     updateServiceContent(0);
     console.log('Starting transform to grid');
 }
@@ -322,16 +374,25 @@ function updateServiceContent(index) {
     const service = services[index];
     const contentDiv = document.getElementById('service-content');
     
-    let featuresHTML = '';
-    service.features.forEach(feature => {
-        featuresHTML += `<li>${feature}</li>`;
-    });
+    // Add fade out class
+    contentDiv.classList.add('fade-out');
     
-    contentDiv.innerHTML = `
-        <h2>${service.title}</h2>
-        <p>${service.description}</p>
-        <ul>${featuresHTML}</ul>
-    `;
+    // Wait for fade out, then update content and fade in
+    setTimeout(() => {
+        let featuresHTML = '';
+        service.features.forEach(feature => {
+            featuresHTML += `<li>${feature}</li>`;
+        });
+        
+        contentDiv.innerHTML = `
+            <h2>${service.title}</h2>
+            <p>${service.description}</p>
+            <ul>${featuresHTML}</ul>
+        `;
+        
+        // Remove fade out class to fade in
+        contentDiv.classList.remove('fade-out');
+    }, 150); // Half of transition duration for smooth crossfade
 }
 
 function updateScrollIndicator() {
