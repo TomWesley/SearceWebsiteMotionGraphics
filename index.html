@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Services</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Our Services</h1>
+        <p>Discover what we can do for you</p>
+    </header>
+
+    <section class="main-section" id="mainSection">
+        <div class="section-container">
+            <!-- Grid Layout (Initial State) -->
+            <div class="cards-grid" id="cardsGrid">
+                <div class="card" data-service="0">
+                    <img src="images/card1.svg" alt="Web Development" class="card-image">
+                </div>
+                <div class="card" data-service="1">
+                    <img src="images/card2.svg" alt="Mobile Development" class="card-image">
+                </div>
+                <div class="card" data-service="2">
+                    <img src="images/card3.svg" alt="UI/UX Design" class="card-image">
+                </div>
+                <div class="card" data-service="3">
+                    <img src="images/card4.svg" alt="Cloud Solutions" class="card-image">
+                </div>
+                <div class="card" data-service="4">
+                    <img src="images/card5.svg" alt="Data Analytics" class="card-image">
+                </div>
+                <div class="card" data-service="5">
+                    <img src="images/card6.svg" alt="Digital Marketing" class="card-image">
+                </div>
+                <div class="card" data-service="6">
+                    <img src="images/card7.svg" alt="Consulting" class="card-image">
+                </div>
+                <div class="card" data-service="7">
+                    <img src="images/card8.svg" alt="Support & Maintenance" class="card-image">
+                </div>
+            </div>
+
+            <!-- Two Column Layout (Transformed State) -->
+            <div class="two-column-layout" id="twoColumnLayout">
+                <div class="left-column">
+                    <div class="card-stack" id="cardStack">
+                        <div class="stacked-card active" data-service="0">
+                            <img src="images/card1.svg" alt="Web Development" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="1">
+                            <img src="images/card2.svg" alt="Mobile Development" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="2">
+                            <img src="images/card3.svg" alt="UI/UX Design" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="3">
+                            <img src="images/card4.svg" alt="Cloud Solutions" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="4">
+                            <img src="images/card5.svg" alt="Data Analytics" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="5">
+                            <img src="images/card6.svg" alt="Digital Marketing" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="6">
+                            <img src="images/card7.svg" alt="Consulting" class="card-image">
+                        </div>
+                        <div class="stacked-card" data-service="7">
+                            <img src="images/card8.svg" alt="Support & Maintenance" class="card-image">
+                        </div>
+                    </div>
+                </div>
+                <div class="right-column">
+                    <div class="service-content active" data-service="0">
+                        <h2>Web Development</h2>
+                        <p>We create stunning, responsive websites that engage your audience and drive results. Our team specializes in modern web technologies and best practices to deliver exceptional user experiences.</p>
+                        <ul>
+                            <li>Custom website design and development</li>
+                            <li>Responsive and mobile-optimized layouts</li>
+                            <li>E-commerce solutions</li>
+                            <li>Content management systems</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="1">
+                        <h2>Mobile Development</h2>
+                        <p>Transform your ideas into powerful mobile applications. We develop native and cross-platform apps that provide seamless user experiences across all devices and operating systems.</p>
+                        <ul>
+                            <li>iOS and Android native apps</li>
+                            <li>Cross-platform development</li>
+                            <li>App store optimization</li>
+                            <li>Mobile app maintenance and updates</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="2">
+                        <h2>UI/UX Design</h2>
+                        <p>Create intuitive and visually appealing user interfaces that delight your customers. Our design team focuses on user research, wireframing, and prototyping to ensure optimal user experiences.</p>
+                        <ul>
+                            <li>User research and persona development</li>
+                            <li>Wireframing and prototyping</li>
+                            <li>Visual design and branding</li>
+                            <li>Usability testing and optimization</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="3">
+                        <h2>Cloud Solutions</h2>
+                        <p>Leverage the power of cloud computing to scale your business efficiently. We provide comprehensive cloud migration, infrastructure setup, and ongoing management services.</p>
+                        <ul>
+                            <li>Cloud migration strategies</li>
+                            <li>Infrastructure as Code</li>
+                            <li>Auto-scaling and load balancing</li>
+                            <li>Cloud security and compliance</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="4">
+                        <h2>Data Analytics</h2>
+                        <p>Turn your data into actionable insights. Our analytics team helps you collect, process, and analyze data to make informed business decisions and drive growth.</p>
+                        <ul>
+                            <li>Data collection and integration</li>
+                            <li>Business intelligence dashboards</li>
+                            <li>Predictive analytics and machine learning</li>
+                            <li>Real-time reporting and monitoring</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="5">
+                        <h2>Digital Marketing</h2>
+                        <p>Boost your online presence and reach your target audience effectively. Our digital marketing strategies combine creativity with data-driven approaches to maximize your ROI.</p>
+                        <ul>
+                            <li>Search engine optimization (SEO)</li>
+                            <li>Pay-per-click advertising (PPC)</li>
+                            <li>Social media marketing</li>
+                            <li>Content marketing and strategy</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="6">
+                        <h2>Consulting</h2>
+                        <p>Get expert guidance on your technology strategy and business transformation. Our consultants work closely with you to identify opportunities and implement solutions that drive success.</p>
+                        <ul>
+                            <li>Technology strategy and roadmapping</li>
+                            <li>Digital transformation consulting</li>
+                            <li>Process optimization</li>
+                            <li>Change management and training</li>
+                        </ul>
+                    </div>
+                    <div class="service-content" data-service="7">
+                        <h2>Support & Maintenance</h2>
+                        <p>Keep your systems running smoothly with our comprehensive support and maintenance services. We provide ongoing monitoring, updates, and technical support to ensure optimal performance.</p>
+                        <ul>
+                            <li>24/7 system monitoring</li>
+                            <li>Regular updates and patches</li>
+                            <li>Performance optimization</li>
+                            <li>Technical support and troubleshooting</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="spacer"></div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
