@@ -59,11 +59,15 @@ header p {
   transform: scale(1);
   justify-self: center;
   align-self: center;
+  position: relative;
+}
+
+.cards-grid.animating {
+  pointer-events: none;
 }
 
 .cards-grid.hidden {
   opacity: 0;
-  transform: scale(0.8);
   pointer-events: none;
   display: none;
 }
@@ -81,9 +85,16 @@ header p {
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
-.card:hover {
+.card.animating {
+  position: fixed;
+  z-index: 1000;
+  transition: all 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.card:hover:not(.animating) {
   transform: translateY(-10px);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
@@ -97,46 +108,57 @@ header p {
 /* Two Column Layout Styles */
 .two-column-layout {
   display: none;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 1200px;
   height: 100vh;
   align-items: center;
+  justify-content: center;
   opacity: 0;
-  transform: translateY(30px);
   transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   pointer-events: none;
 }
 
 .two-column-layout.active {
-  display: grid;
+  display: flex;
   opacity: 1;
-  transform: translateY(0);
   pointer-events: all;
 }
 
+.two-column-layout.preparing {
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .left-column {
+  position: fixed;
+  width: 50%;
+  height: 430px;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  width: 100%;
+  left: 0;
+  /* Top will be calculated and set by JavaScript */
 }
 
 .right-column {
+  position: fixed;
+  width: 50%;
+  height: 430px;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  width: 100%;
   padding: 40px;
+  left: 50%;
+  /* Top will be calculated and set by JavaScript */
 }
 
 .card-stack {
   position: relative;
-  width: 400px;
-  height: 400px;
+  width: 430px;
+  height: 430px;
 }
 
 .stacked-card {
@@ -165,8 +187,8 @@ header p {
 }
 
 .stacked-card .card-image {
-  width: 200px;
-  height: 200px;
+  width: 215px;
+  height: 215px;
   object-fit: contain;
 }
 
