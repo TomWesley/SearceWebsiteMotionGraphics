@@ -79,60 +79,90 @@ class AnimatedCardsController {
         this.isAnimating = true;
         this.isTransformed = true;
         
-        // Step 1: Prepare the two-column layout
-        this.twoColumnLayout.classList.add('preparing');
+        // Step 1: Capture each card's current position BEFORE changing anything
+        const cardPositions = [];
+        this.cards.forEach((card, index) => {
+            const rect = card.getBoundingClientRect();
+            cardPositions[index] = {
+                left: rect.left,
+                top: rect.top,
+                centerX: rect.left + rect.width / 2,
+                centerY: rect.top + rect.height / 2
+            };
+            console.log(`Card ${index} original position: X=${cardPositions[index].centerX}, Y=${cardPositions[index].centerY}`);
+        });
+        
+        // Step 2: Calculate target position
+        const targetX = window.innerWidth * 0.25; // 25% from left edge
+        const targetY = window.innerHeight * 0.5;  // 50% from top edge
+        console.log(`Target coordinates: X=${targetX}, Y=${targetY}`);
+        
+        // Step 3: Add animating class and set initial fixed positions to match original grid positions
+        this.cardsGrid.classList.add('animating');
+        this.cards.forEach((card, index) => {
+            card.classList.add('animating');
+            card.style.zIndex = 1000 + index;
+            
+            // Set the card to its original position when it becomes position: fixed
+            const pos = cardPositions[index];
+            card.style.left = `${pos.left}px`;
+            card.style.top = `${pos.top}px`;
+            card.style.transform = 'translate(0, 0) scale(1)'; // Start with no transform
+        });
+        
+        // Step 4: Wait a frame so the positioning takes effect
         await this.waitForNextFrame();
         
+        // Step 5: Now animate to target positions
+        this.cards.forEach((card, index) => {
+            const pos = cardPositions[index];
+            
+            // Add slight offset so we can see all cards during animation
+            const offsetX = (index % 4 - 1.5) * 10;
+            const offsetY = (Math.floor(index / 4) - 0.5) * 10;
+            
+            const deltaX = (targetX + offsetX) - pos.centerX;
+            const deltaY = (targetY + offsetY) - pos.centerY;
+            
+            console.log(`Card ${index} animation delta: X=${deltaX}, Y=${deltaY}`);
+            
+            // Calculate correct scale
+            const targetScale = 430 / 200; // 2.15x scale
+            
+            // Apply the transformation - this will now animate smoothly from original position
+            card.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${targetScale})`;
+            card.style.opacity = '0.8';
+        });
+        
+        // Step 6: Wait for animation to complete
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Step 7: Set up the two-column layout
+        this.setupTwoColumnLayout(targetX, targetY);
+        
+        // Step 8: Hide animated cards and show two-column layout
+        this.cardsGrid.classList.add('hidden');
+        this.twoColumnLayout.classList.add('active');
+        
+        // Step 9: Reset
+        this.resetCardPositions();
+        this.isAnimating = false;
+    }
+    
+    setupTwoColumnLayout(targetX, targetY) {
         const leftColumn = this.twoColumnLayout.querySelector('.left-column');
         const rightColumn = this.twoColumnLayout.querySelector('.right-column');
         
-        // Position columns at screen center
-        const columnTop = (window.innerHeight / 2) - 215;
+        // Position left column so its center aligns with where cards ended up
+        const columnTop = targetY - 215; // Center the 430px height on target Y
         leftColumn.style.top = `${columnTop}px`;
         rightColumn.style.top = `${columnTop}px`;
         
-        // Step 2: Start animating cards
-        this.cardsGrid.classList.add('animating');
-        
-        // Step 3: Move each card from its current position to target with slight offsets
-        this.cards.forEach((card, index) => {
-            const cardRect = card.getBoundingClientRect();
-            const startX = cardRect.left + cardRect.width / 2;
-            const startY = cardRect.top + cardRect.height / 2;
-            
-            // Target: exactly 25% width, 50% height of screen
-            const targetX = window.innerWidth * 0.25;
-            const targetY = window.innerHeight * 0.5;
-            
-            // Add slight offset so we can see all cards during animation
-            const offsetX = (index % 4 - 1.5) * 5; // Small horizontal spread
-            const offsetY = (Math.floor(index / 4) - 0.5) * 5; // Small vertical spread
-            
-            const deltaX = targetX + offsetX - startX;
-            const deltaY = targetY + offsetY - startY;
-            
-            // Calculate correct scale: final card stack is 430px, original cards are 200px
-            const targetScale = 430 / 200; // 2.15x scale
-            
-            // Apply the transformation immediately
-            card.classList.add('animating');
-            card.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${targetScale})`;
-            card.style.opacity = '0.8'; // Make slightly transparent so we can see overlap
-            card.style.zIndex = 1000 + index; // Different z-index for each card
-        });
-        
-        // Step 4: Wait for animation to complete (much slower)
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        // Step 5: Show two-column layout
-        this.cardsGrid.classList.add('hidden');
-        await this.waitForNextFrame();
-        this.twoColumnLayout.classList.remove('preparing');
-        this.twoColumnLayout.classList.add('active');
-        
-        // Step 6: Reset
-        this.resetCardPositions();
-        this.isAnimating = false;
+        // Make sure columns are positioned correctly
+        leftColumn.style.left = '0';
+        leftColumn.style.width = '50%';
+        rightColumn.style.left = '50%';
+        rightColumn.style.width = '50%';
     }
     
     async transformToGrid() {
@@ -140,7 +170,7 @@ class AnimatedCardsController {
         this.isAnimating = true;
         this.isTransformed = false;
         
-        // Step 1: Hide two-column layout
+        // Step 1: Hide two-column layout immediately
         this.twoColumnLayout.classList.remove('active');
         
         // Step 2: Show grid and animate cards back
@@ -155,7 +185,7 @@ class AnimatedCardsController {
             card.style.zIndex = '1';
         });
         
-        // Step 4: Wait for animation (same slow speed)
+        // Step 4: Wait for animation
         await new Promise(resolve => setTimeout(resolve, 5000));
         
         // Step 5: Clean up
