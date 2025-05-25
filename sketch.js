@@ -607,7 +607,6 @@ function draw() {
         }
     }
     
-    // Draw connecting lines during major transitions (Apple-style)
   
     
     // Sort cards for proper drawing order
