@@ -64,6 +64,7 @@
             transition: opacity 0.5s ease;
             pointer-events: none;
             z-index: 5;
+            overflow: hidden;
         }
         
         #service-overlay.active {
@@ -71,50 +72,45 @@
             pointer-events: all;
         }
         
+        /* Scrollable container for all service content */
+        #services-container {
+            position: relative;
+            width: 100%;
+            height: 800%; /* 8 services * 100% each */
+            transition: transform 0.1s ease-out;
+        }
+        
         .service-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 12.5%; /* 100% / 8 services */
             padding: clamp(20px, 4vw, 40px);
             max-width: clamp(300px, 50vw, 500px);
+            margin: 0 auto;
             text-align: center;
-            transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            transform: translateY(0px) translateX(0px) scale(1);
-            opacity: 1;
-            filter: blur(0px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transform: translateY(0);
         }
         
-        .service-content.fade-out {
-            opacity: 0;
-            transform: translateY(-40px) translateX(-30px) scale(0.9);
-            filter: blur(3px);
-        }
-        
-        .service-content.fade-in-prepare {
-            opacity: 0;
-            transform: translateY(50px) translateX(40px) scale(1.1);
-            filter: blur(5px);
-        }
+        .service-content:nth-child(1) { top: 0%; }
+        .service-content:nth-child(2) { top: 12.5%; }
+        .service-content:nth-child(3) { top: 25%; }
+        .service-content:nth-child(4) { top: 37.5%; }
+        .service-content:nth-child(5) { top: 50%; }
+        .service-content:nth-child(6) { top: 62.5%; }
+        .service-content:nth-child(7) { top: 75%; }
+        .service-content:nth-child(8) { top: 87.5%; }
         
         .service-content h2 {
             font-size: clamp(1.8em, 4vw, 2.5em);
             margin-bottom: clamp(15px, 2vw, 20px);
             color: #ffffff;
             font-weight: 300;
-            transition: all 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            transform: translateX(0px) rotateX(0deg);
-            opacity: 1;
-            text-shadow: 0 0 0 transparent;
-        }
-        
-        .service-content.fade-out h2 {
-            opacity: 0;
-            transform: translateX(-80px) rotateX(-15deg);
-            text-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            transition-delay: 0s;
-        }
-        
-        .service-content.fade-in-prepare h2 {
-            opacity: 0;
-            transform: translateX(100px) rotateX(15deg);
-            text-shadow: 0 15px 30px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
         }
         
         .service-content p {
@@ -122,23 +118,7 @@
             margin-bottom: clamp(20px, 3vw, 30px);
             color: #ffffff;
             line-height: 1.8;
-            transition: all 1.0s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            transform: translateY(0px) scale(1);
-            opacity: 1;
-            filter: blur(0px);
-        }
-        
-        .service-content.fade-out p {
-            opacity: 0;
-            transform: translateY(-30px) scale(0.95);
-            filter: blur(2px);
-            transition-delay: 0.1s;
-        }
-        
-        .service-content.fade-in-prepare p {
-            opacity: 0;
-            transform: translateY(40px) scale(1.05);
-            filter: blur(3px);
+            transition: all 0.3s ease;
         }
         
         .service-content ul {
@@ -146,23 +126,7 @@
             padding: 0;
             margin: 0;
             text-align: left;
-            transition: all 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            transform: translateY(0px) rotateX(0deg);
-            opacity: 1;
-            filter: blur(0px);
-        }
-        
-        .service-content.fade-out ul {
-            opacity: 0;
-            transform: translateY(-25px) rotateX(-10deg);
-            filter: blur(2px);
-            transition-delay: 0.2s;
-        }
-        
-        .service-content.fade-in-prepare ul {
-            opacity: 0;
-            transform: translateY(35px) rotateX(10deg);
-            filter: blur(4px);
+            transition: all 0.3s ease;
         }
         
         .service-content li {
@@ -171,49 +135,7 @@
             margin-bottom: clamp(8px, 1.5vw, 12px);
             position: relative;
             padding-left: 25px;
-            transition: all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            transform: translateX(0px) scale(1);
-            opacity: 1;
-            filter: blur(0px);
-        }
-        
-        .service-content.fade-out li {
-            opacity: 0;
-            transform: translateX(-40px) scale(0.9);
-            filter: blur(1px);
-        }
-        
-        .service-content.fade-in-prepare li {
-            opacity: 0;
-            transform: translateX(50px) scale(1.1);
-            filter: blur(2px);
-        }
-        
-        /* Dramatic staggered animation for list items */
-        .service-content li:nth-child(1) { 
-            transition-delay: 0.1s; 
-        }
-        .service-content li:nth-child(2) { 
-            transition-delay: 0.2s;
-        }
-        .service-content li:nth-child(3) { 
-            transition-delay: 0.3s;
-        }
-        .service-content li:nth-child(4) { 
-            transition-delay: 0.4s;
-        }
-        
-        .service-content.fade-out li:nth-child(1) { 
-            transition-delay: 0.4s; 
-        }
-        .service-content.fade-out li:nth-child(2) { 
-            transition-delay: 0.35s; 
-        }
-        .service-content.fade-out li:nth-child(3) { 
-            transition-delay: 0.3s; 
-        }
-        .service-content.fade-out li:nth-child(4) { 
-            transition-delay: 0.25s; 
+            transition: all 0.3s ease;
         }
         
         .service-content li:before {
@@ -280,8 +202,8 @@
 
     <div id="canvas-container">
         <div id="service-overlay">
-            <div class="service-content" id="service-content">
-                <!-- Content will be populated by JavaScript -->
+            <div id="services-container">
+                <!-- All service content will be populated here -->
             </div>
         </div>
     </div>

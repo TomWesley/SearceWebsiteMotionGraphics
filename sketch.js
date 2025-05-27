@@ -100,32 +100,32 @@ let cardTransitionProgress = 0;
 let cardTransitionPhase = 0;
 let canvasHeight = 0;
 
+// Smooth scrolling variables
+let smoothScrollProgress = 0; // Continuous scroll progress (0-7 for smooth interpolation)
+let targetScrollProgress = 0;
+
 // Discrete scroll system
 let currentScrollPosition = 0; // 0 = grid, 1-8 = individual cards
 let lastScrollTime = 0;
-let scrollDebounceDelay = 400; // Longer delay to prevent multiple inputs
-let scrollBlocked = false; // Flag to completely block input during cooldown
+let scrollDebounceDelay = 100; // Shorter delay for more responsive text scrolling
+let scrollBlocked = false;
 const totalPositions = 9; // Grid + 8 cards
 
 // Responsive scaling variables
 let baseCardSize = 240;
 let baseTargetSize = 480;
 let scaleFactor = 1;
-let sizeLimit = 1.2; // **SIZE LIMIT CONTROL** - Maximum scale factor (1.2 = 120% max size)
+let sizeLimit = 1.2; // Maximum scale factor
 
 function calculateScaleFactor() {
-    // Scale based on window width, with reasonable min/max bounds
-    const baseWidth = 1200; // Reference width
+    const baseWidth = 1200;
     const rawScale = windowWidth / baseWidth;
-    
-    // Apply size limit as maximum constraint
     scaleFactor = Math.max(0.6, Math.min(sizeLimit, rawScale));
-    
     baseCardSize = 240 * scaleFactor;
     baseTargetSize = 480 * scaleFactor;
 }
 
-// Smooth easing functions (Apple-style)
+// Smooth easing functions
 function easeOutCubic(t) {
     return 1 - Math.pow(1 - t, 3);
 }
@@ -134,14 +134,7 @@ function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-function easeOutElastic(t) {
-    // More subtle elastic for Apple-like premium feel
-    const c4 = (2 * Math.PI) / 4.5; // Less bouncy
-    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -8 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
-}
-
 function easeInOutQuart(t) {
-    // Apple's signature easing curve
     return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 }
 
@@ -160,14 +153,13 @@ class Card {
         this.alpha = 255;
         this.rotation = 0;
         this.scale = 1.0;
-        this.elevation = 0; // For shadow/depth effects
-        this.glowIntensity = 0; // For transition glow effects
-        this.trailPositions = []; // For motion trails
-        this.animationDelay = 0; // Staggered animation timing
+        this.elevation = 0;
+        this.glowIntensity = 0;
+        this.trailPositions = [];
+        this.animationDelay = 0;
     }
     
     updateSizes() {
-        // Update sizes when scale factor changes
         this.size = baseCardSize;
         this.targetSize = baseTargetSize;
         if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
@@ -178,7 +170,6 @@ class Card {
     }
     
     update() {
-        // Update based on current state
         if (currentState === ANIMATING_TO_STACK) {
             this.animateToStack();
         } else if (currentState === ANIMATING_TO_GRID) {
@@ -189,35 +180,28 @@ class Card {
     }
     
     animateToStack() {
-        // Calculate staggered animation delay (Apple-style cascading)
-        const baseDelay = this.index * 0.08; // 80ms stagger between cards
+        const baseDelay = this.index * 0.08;
         const adjustedProgress = Math.max(0, Math.min(1, (animationProgress - baseDelay) / (1 - baseDelay)));
         
         if (adjustedProgress <= 0) {
-            // Card hasn't started animating yet
             this.glowIntensity = 0;
             return;
         }
         
-        // Target position - match exactly what the stack state will use
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         let targetX, targetY;
         
-        // Calculate target position based on what this card's final stack position will be
         if (this.index === currentActiveCard) {
-            // Active card goes to exact center
             targetX = baseX;
             targetY = baseY;
         } else if (this.index > currentActiveCard) {
-            // Cards ahead in stack - positioned behind and to the right
             const offset = (this.index - currentActiveCard);
             const stackOffset = offset * 8 * scaleFactor;
             const depthOffset = offset * 3 * scaleFactor;
             targetX = baseX + stackOffset;
             targetY = baseY + depthOffset;
         } else {
-            // Cards already shown - positioned behind and to the left
             const offset = (currentActiveCard - this.index);
             const stackOffset = offset * 5 * scaleFactor;
             const depthOffset = offset * 2 * scaleFactor;
@@ -225,45 +209,33 @@ class Card {
             targetY = baseY + depthOffset;
         }
         
-        // Apple-style curved path animation using bezier-like easing
         const t = easeInOutCubic(adjustedProgress);
-        
-        // Create curved trajectory (not straight line)
         const midPointX = (this.startX + targetX) / 2 + Math.sin(adjustedProgress * Math.PI) * 40;
         const midPointY = (this.startY + targetY) / 2 - Math.abs(Math.sin(adjustedProgress * Math.PI)) * 60;
         
-        // Bezier curve animation
         this.x = lerp(lerp(this.startX, midPointX, t), lerp(midPointX, targetX, t), t);
         this.y = lerp(lerp(this.startY, midPointY, t), lerp(midPointY, targetY, t), t);
         
-        // Seamless size animation that reaches full target size
         if (adjustedProgress < 0.4) {
-            // Keep original size for first 40% of animation
             this.currentSize = this.size;
         } else {
-            // Gradual size increase over remaining 60% to reach FULL target size
-            const sizeProgress = (adjustedProgress - 0.4) / 0.6; // 0 to 1 over final 60%
-            const seamlessEasing = easeInOutQuart(sizeProgress * sizeProgress); // Smooth curve
-            this.currentSize = lerp(this.size, this.targetSize, seamlessEasing); // Full scaling to target
+            const sizeProgress = (adjustedProgress - 0.4) / 0.6;
+            const seamlessEasing = easeInOutQuart(sizeProgress * sizeProgress);
+            this.currentSize = lerp(this.size, this.targetSize, seamlessEasing);
         }
         
-        // Smoother visual effects
-        this.alpha = lerp(255, 240, t * 0.5); // Very subtle alpha change
-        this.rotation = Math.sin(adjustedProgress * Math.PI) * 2; // Minimal rotation
-        this.scale = 1.0 + Math.sin(adjustedProgress * Math.PI) * 0.01; // Barely noticeable breathing
-        this.elevation = adjustedProgress * 6; // Minimal elevation
+        this.alpha = lerp(255, 240, t * 0.5);
+        this.rotation = Math.sin(adjustedProgress * Math.PI) * 2;
+        this.scale = 1.0 + Math.sin(adjustedProgress * Math.PI) * 0.01;
+        this.elevation = adjustedProgress * 6;
+        this.glowIntensity = Math.sin(adjustedProgress * Math.PI) * 30;
         
-        // Very gentle glowing effect
-        this.glowIntensity = Math.sin(adjustedProgress * Math.PI) * 30; // Subtle glow
-        
-        // Store trail positions for motion blur effect
         if (this.trailPositions.length > 5) this.trailPositions.shift();
         this.trailPositions.push({x: this.x, y: this.y, alpha: this.glowIntensity});
     }
     
     animateToGrid() {
-        // Reverse animation with similar sophistication
-        const baseDelay = (7 - this.index) * 0.05; // Reverse stagger
+        const baseDelay = (7 - this.index) * 0.05;
         const adjustedProgress = Math.max(0, Math.min(1, (animationProgress - baseDelay) / (1 - baseDelay)));
         
         if (adjustedProgress <= 0) {
@@ -279,7 +251,6 @@ class Card {
         const t = easeInOutCubic(adjustedProgress);
         const curveT = easeOutCubic(adjustedProgress);
         
-        // Curved return path
         const midPointX = (startStackX + this.startX) / 2 - Math.sin(adjustedProgress * Math.PI) * 50;
         const midPointY = (startStackY + this.startY) / 2 - Math.abs(Math.sin(adjustedProgress * Math.PI)) * 80;
         
@@ -291,60 +262,51 @@ class Card {
         this.rotation = -Math.sin(adjustedProgress * Math.PI) * 6;
         this.scale = 1.0 + Math.sin(adjustedProgress * Math.PI) * 0.03;
         this.elevation = (1 - adjustedProgress) * 10;
-        
         this.glowIntensity = Math.sin(adjustedProgress * Math.PI) * 60;
         
-        // Trail effect
         if (this.trailPositions.length > 5) this.trailPositions.shift();
         this.trailPositions.push({x: this.x, y: this.y, alpha: this.glowIntensity});
     }
     
     updateInStack() {
-        // In stacked state, create a sophisticated card stack effect
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         
         this.currentSize = this.targetSize;
         
         if (this.index === currentActiveCard) {
-            // Active card - front and center with subtle hover effect
             this.x = baseX;
             this.y = baseY;
             this.alpha = 255;
             this.rotation = 0;
-            this.scale = 1.0 + Math.sin(millis() * 0.001) * 0.01; // Subtle breathing effect
+            this.scale = 1.0 + Math.sin(millis() * 0.001) * 0.01;
             this.elevation = 8;
             
         } else if (this.index === previousActiveCard && cardTransitionProgress < 1.0) {
-            // Previous card - sophisticated slide-out with rotation and scale
             const t = easeInOutCubic(cardTransitionProgress);
             const slideDistance = 150 * scaleFactor;
             
-            // Multi-phase animation
             if (cardTransitionProgress < 0.3) {
-                // Phase 1: Lift and rotate slightly
                 const phase1 = cardTransitionProgress / 0.3;
                 const liftT = easeOutCubic(phase1);
                 this.x = baseX;
                 this.y = baseY - (20 * liftT);
-                this.rotation = -5 * liftT; // Slight rotation
-                this.scale = 1.0 + (0.05 * liftT); // Slight scale up
+                this.rotation = -5 * liftT;
+                this.scale = 1.0 + (0.05 * liftT);
                 this.alpha = 255;
                 this.elevation = 8 + (4 * liftT);
                 
             } else if (cardTransitionProgress < 0.8) {
-                // Phase 2: Slide and fade
                 const phase2 = (cardTransitionProgress - 0.3) / 0.5;
                 const slideT = easeInOutCubic(phase2);
                 this.x = baseX + (slideDistance * slideT);
                 this.y = baseY - 20 - (slideDistance * 0.2 * slideT);
-                this.rotation = -5 - (10 * slideT); // More rotation
-                this.scale = 1.05 - (0.3 * slideT); // Scale down
+                this.rotation = -5 - (10 * slideT);
+                this.scale = 1.05 - (0.3 * slideT);
                 this.alpha = 255 * (1 - slideT * 0.7);
                 this.elevation = 12 - (8 * slideT);
                 
             } else {
-                // Phase 3: Final fade and settle
                 const phase3 = (cardTransitionProgress - 0.8) / 0.2;
                 const fadeT = easeOutCubic(phase3);
                 this.x = baseX + slideDistance;
@@ -356,27 +318,25 @@ class Card {
             }
             
         } else if (this.index > currentActiveCard) {
-            // Cards ahead in stack - layered with subtle perspective
             const offset = (this.index - currentActiveCard);
             const stackOffset = offset * 8 * scaleFactor;
             const depthOffset = offset * 3 * scaleFactor;
             
             this.x = baseX + stackOffset;
             this.y = baseY + depthOffset;
-            this.rotation = offset * 1.5; // Slight rotation for depth
-            this.scale = 1.0 - (offset * 0.03); // Subtle scale difference
+            this.rotation = offset * 1.5;
+            this.scale = 1.0 - (offset * 0.03);
             this.alpha = Math.max(60, 180 - (offset * 25));
             this.elevation = Math.max(1, 6 - offset);
             
         } else {
-            // Cards already shown - settled stack with gentle placement
             const offset = (currentActiveCard - this.index);
             const stackOffset = offset * 5 * scaleFactor;
             const depthOffset = offset * 2 * scaleFactor;
             
             this.x = baseX - stackOffset;
             this.y = baseY + depthOffset;
-            this.rotation = -offset * 1; // Opposite rotation
+            this.rotation = -offset * 1;
             this.scale = 1.0 - (offset * 0.02);
             this.alpha = Math.max(40, 120 - (offset * 15));
             this.elevation = Math.max(0, 4 - offset);
@@ -386,7 +346,7 @@ class Card {
     draw() {
         push();
         
-        // Draw motion trails during transitions (Apple-style motion blur)
+        // Draw motion trails during transitions
         if (this.trailPositions.length > 1 && this.glowIntensity > 10) {
             for (let i = 0; i < this.trailPositions.length - 1; i++) {
                 const trail = this.trailPositions[i];
@@ -395,7 +355,6 @@ class Card {
                 push();
                 translate(trail.x, trail.y);
                 
-                // Glowing trail effect
                 drawingContext.save();
                 drawingContext.shadowColor = 'rgba(102, 126, 234, 0.4)';
                 drawingContext.shadowBlur = 15;
@@ -409,12 +368,11 @@ class Card {
             }
         }
         
-        // Main card transforms
         translate(this.x, this.y);
         rotate(radians(this.rotation));
         scale(this.scale);
         
-        // Premium multi-layered shadows with elevation
+        // Premium shadows
         if (this.elevation > 0) {
             const shadowLayers = Math.min(4, Math.ceil(this.elevation / 3));
             for (let i = 0; i < shadowLayers; i++) {
@@ -431,14 +389,13 @@ class Card {
             }
         }
         
-        // Outer glow effect during transitions
+        // Glow effect
         if (this.glowIntensity > 5) {
             push();
             drawingContext.save();
             drawingContext.shadowColor = `rgba(102, 126, 234, ${this.glowIntensity / 200})`;
             drawingContext.shadowBlur = this.glowIntensity / 2;
             
-            // Multiple glow layers for depth
             for (let i = 0; i < 3; i++) {
                 const glowSize = this.currentSize + (i * 8);
                 const glowAlpha = (this.glowIntensity / 3) * (3 - i);
@@ -450,9 +407,8 @@ class Card {
             pop();
         }
         
-        // Premium card background with subtle gradient
+        // Card background
         if (this.index === currentActiveCard && currentState === STACKED_STATE) {
-            // Active card gets premium treatment
             drawingContext.save();
             const gradient = drawingContext.createLinearGradient(
                 -this.currentSize/2, -this.currentSize/2,
@@ -473,7 +429,6 @@ class Card {
             drawingContext.stroke();
             drawingContext.restore();
         } else {
-            // Standard cards with subtle enhancement during transitions
             const borderGlow = this.glowIntensity > 5 ? this.glowIntensity / 4 : 0;
             fill(255, this.alpha);
             stroke(102, 126, 234, Math.min(100, 50 + borderGlow) * (this.alpha / 255));
@@ -481,13 +436,11 @@ class Card {
             rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 15);
         }
         
-        // Card image with subtle effects
+        // Card image
         if (this.img) {
-            // Add subtle brightness increase during transitions
             const brightnessBoost = this.glowIntensity > 5 ? 1.1 : 1.0;
             tint(255 * brightnessBoost, this.alpha);
             
-            // Subtle image glow during transitions
             if (this.glowIntensity > 10) {
                 drawingContext.save();
                 drawingContext.shadowColor = 'rgba(102, 126, 234, 0.3)';
@@ -514,42 +467,32 @@ function preload() {
 }
 
 function setup() {
-    // Calculate canvas height (viewport minus header)
-    canvasHeight = window.innerHeight - 120; // 120px header height
-    
-    // Calculate responsive scale factor
+    canvasHeight = window.innerHeight - 120;
     calculateScaleFactor();
     
-    // Create canvas that fills width and calculated height
     const canvas = createCanvas(windowWidth, canvasHeight);
     canvas.parent('canvas-container');
     
-    // Initialize cards in grid formation
     setupCardGrid();
+    initializeServiceContent();
     
-    // Setup wheel listener for scroll input (prevents actual scrolling)
     window.addEventListener('wheel', handleWheel, { passive: false });
     
-    // Setup resize listener
     window.addEventListener('resize', () => {
         canvasHeight = window.innerHeight - 120;
-        calculateScaleFactor(); // Recalculate scale
+        calculateScaleFactor();
         resizeCanvas(windowWidth, canvasHeight);
-        setupCardGrid(); // Recalculate positions
+        setupCardGrid();
         
-        // Update existing card sizes
         for (let card of cards) {
             card.updateSizes();
         }
     });
-    
-    // Initialize service content
-    updateServiceContent(0);
 }
 
 function setupCardGrid() {
     cards = [];
-    const cardSpacing = 350 * scaleFactor; // Responsive spacing
+    const cardSpacing = 350 * scaleFactor;
     const gridWidth = 4 * cardSpacing;
     const gridHeight = 2 * cardSpacing;
     const startX = width / 2 - gridWidth / 2 + cardSpacing / 2;
@@ -565,30 +508,49 @@ function setupCardGrid() {
     }
 }
 
+function initializeServiceContent() {
+    const servicesContainer = document.getElementById('services-container');
+    
+    // Create all service content divs
+    services.forEach((service, index) => {
+        const serviceDiv = document.createElement('div');
+        serviceDiv.className = 'service-content';
+        
+        let featuresHTML = '';
+        service.features.forEach(feature => {
+            featuresHTML += `<li>${feature}</li>`;
+        });
+        
+        serviceDiv.innerHTML = `
+            <h2>${service.title}</h2>
+            <p>${service.description}</p>
+            <ul>${featuresHTML}</ul>
+        `;
+        
+        servicesContainer.appendChild(serviceDiv);
+    });
+}
+
 function draw() {
-    // Dark theme background
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         drawPremiumBackground();
     } else {
-        background(0, 22, 48); // #001630
+        background(0, 22, 48);
     }
     
-    // Handle scroll input unblocking
     if (scrollBlocked && millis() - lastScrollTime > scrollDebounceDelay) {
         scrollBlocked = false;
     }
     
-    // Handle discrete scroll position changes
     updateDiscreteScrolling();
+    updateSmoothScrolling();
     
-    // Update animation progress
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         animationProgress += animationSpeed;
         
         if (animationProgress >= 1.0) {
             animationProgress = 1.0;
             
-            // Transition to next state
             if (currentState === ANIMATING_TO_STACK) {
                 currentState = STACKED_STATE;
                 document.getElementById('service-overlay').classList.add('active');
@@ -599,54 +561,41 @@ function draw() {
         }
     }
     
-    // Update card transition progress with sophisticated timing
     if (cardTransitionProgress < 1.0) {
-        cardTransitionProgress += 0.012; // Much slower, more elegant transitions
+        cardTransitionProgress += 0.012;
         if (cardTransitionProgress >= 1.0) {
             cardTransitionProgress = 1.0;
         }
     }
     
-  
-    
-    // Sort cards for proper drawing order
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
-        // Draw cards in reverse order so active card appears on top
         sortedCards.sort((a, b) => {
             if (a.index === currentActiveCard) return 1;
             if (b.index === currentActiveCard) return -1;
             return a.index - b.index;
         });
     } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
-        // During transitions, draw card 0 (top-left) last so it appears on top
         sortedCards.sort((a, b) => {
-            if (a.index === 0) return 1; // Card 0 drawn last (on top)
+            if (a.index === 0) return 1;
             if (b.index === 0) return -1;
-            return a.index - b.index; // Others in normal order
+            return a.index - b.index;
         });
     }
     
-    // Update and draw cards
     for (let card of sortedCards) {
         card.update();
         card.draw();
     }
     
-    // Draw ambient particles during transitions
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         drawAmbientParticles();
     }
     
-    // Update scroll progress indicator
     updateScrollIndicator();
-    
-    // Debug info
-    // drawDebugInfo();
 }
 
 function drawPremiumBackground() {
-    // Dark theme animated gradient background during transitions
     const gradientIntensity = Math.sin(animationProgress * Math.PI);
     
     drawingContext.save();
@@ -658,7 +607,6 @@ function drawPremiumBackground() {
     drawingContext.fillStyle = gradient;
     drawingContext.fillRect(0, 0, width, canvasHeight);
     
-    // Subtle radial glow from center during animation
     const centerX = width * 0.5;
     const centerY = canvasHeight * 0.5;
     const radialGradient = drawingContext.createRadialGradient(
@@ -673,40 +621,7 @@ function drawPremiumBackground() {
     drawingContext.restore();
 }
 
-function drawConnectionLines() {
-    // Apple-style connecting lines between cards during transition
-    const lineAlpha = Math.sin(animationProgress * Math.PI) * 40;
-    const targetX = width * 0.25;
-    const targetY = canvasHeight * 0.5;
-    
-    stroke(102, 126, 234, lineAlpha);
-    strokeWeight(1);
-    
-    // Draw elegant curved lines from each card to the center
-    for (let card of cards) {
-        if (card.glowIntensity > 5) {
-            push();
-            
-            // Curved line using bezier-like approach
-            const midX = (card.x + targetX) / 2;
-            const midY = (card.y + targetY) / 2 - 30;
-            
-            drawingContext.save();
-            drawingContext.strokeStyle = `rgba(102, 126, 234, ${lineAlpha / 255})`;
-            drawingContext.lineWidth = 1;
-            drawingContext.beginPath();
-            drawingContext.moveTo(card.x, card.y);
-            drawingContext.quadraticCurveTo(midX, midY, targetX, targetY);
-            drawingContext.stroke();
-            drawingContext.restore();
-            
-            pop();
-        }
-    }
-}
-
 function drawAmbientParticles() {
-    // Subtle floating particles during transitions (Apple-style ambient effect)
     const particleCount = 8;
     const particleAlpha = Math.sin(animationProgress * Math.PI) * 30;
     
@@ -727,52 +642,59 @@ function drawAmbientParticles() {
 }
 
 function updateDiscreteScrolling() {
-    // Handle state transitions based on discrete position
     if (currentScrollPosition === 0) {
-        // Position 0: Grid view
         if (currentState === STACKED_STATE) {
             startTransformToGrid();
         }
     } else {
-        // Positions 1-8: Stacked view with specific card active
         if (currentState === GRID_STATE) {
             startTransformToStack();
         }
         
-        // Update active card based on position
-        const targetCard = currentScrollPosition - 1; // Convert to 0-7 index
+        const targetCard = currentScrollPosition - 1;
         if (targetCard !== currentActiveCard && cardTransitionProgress >= 1.0) {
             previousActiveCard = currentActiveCard;
             currentActiveCard = targetCard;
             cardTransitionProgress = 0;
-            updateServiceContent(currentActiveCard);
         }
     }
 }
 
-function handleWheel(event) {
-    // Prevent actual page scrolling
-    event.preventDefault();
-    
-    // STRICT INPUT BLOCKING - ignore ALL input if we're in cooldown
-    if (scrollBlocked) {
-        return; // Completely ignore this scroll event
+function updateSmoothScrolling() {
+    // Update smooth scroll progress for text content
+    if (currentScrollPosition === 0) {
+        targetScrollProgress = 0;
+    } else {
+        targetScrollProgress = currentScrollPosition - 1; // 0-7 for services
     }
     
-    // Determine scroll direction (ignore magnitude completely)
+    // Smooth interpolation to target
+    const lerpSpeed = 0.12; // Adjust for smoothness vs responsiveness
+    smoothScrollProgress = lerp(smoothScrollProgress, targetScrollProgress, lerpSpeed);
+    
+    // Update the services container transform
+    if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
+        const servicesContainer = document.getElementById('services-container');
+        const scrollPercent = -(smoothScrollProgress / 7) * 100; // Convert to percentage for transform
+        servicesContainer.style.transform = `translateY(${scrollPercent}%)`;
+    }
+}
+
+function handleWheel(event) {
+    event.preventDefault();
+    
+    if (scrollBlocked) {
+        return;
+    }
+    
     const scrollDirection = event.deltaY > 0 ? 1 : -1;
-    
-    // Update position by exactly one step
     const newPosition = currentScrollPosition + scrollDirection;
-    
-    // Clamp to valid range (0-8)
     currentScrollPosition = Math.max(0, Math.min(totalPositions - 1, newPosition));
     
-    // BLOCK ALL FURTHER INPUT for the debounce period
     scrollBlocked = true;
     lastScrollTime = millis();
     
-    console.log(`Scroll position: ${currentScrollPosition} (${getPositionName()}) - Input blocked for ${scrollDebounceDelay}ms`);
+    console.log(`Scroll position: ${currentScrollPosition} (${getPositionName()}) - Smooth progress: ${smoothScrollProgress.toFixed(2)}`);
 }
 
 function getPositionName() {
@@ -789,7 +711,6 @@ function startTransformToStack() {
     currentState = ANIMATING_TO_STACK;
     animationProgress = 0;
     
-    // Initialize premium animation properties
     for (let card of cards) {
         card.glowIntensity = 0;
         card.trailPositions = [];
@@ -807,8 +728,9 @@ function startTransformToGrid() {
     currentActiveCard = 0;
     previousActiveCard = 0;
     cardTransitionProgress = 1.0;
+    smoothScrollProgress = 0;
+    targetScrollProgress = 0;
     
-    // Reset all premium card animation properties
     for (let card of cards) {
         card.rotation = 0;
         card.scale = 1.0;
@@ -817,79 +739,21 @@ function startTransformToGrid() {
         card.trailPositions = [];
     }
     
-    updateServiceContent(0);
     console.log('Starting premium transform to grid');
-}
-
-function updateServiceContent(index) {
-    const service = services[index];
-    const contentDiv = document.getElementById('service-content');
-    
-    // Phase 1: Dramatic fade out with staggered timing
-    contentDiv.classList.add('fade-out');
-    
-    // Phase 2: Prepare new content with entering position
-    setTimeout(() => {
-        let featuresHTML = '';
-        service.features.forEach(feature => {
-            featuresHTML += `<li>${feature}</li>`;
-        });
-        
-        contentDiv.innerHTML = `
-            <h2>${service.title}</h2>
-            <p>${service.description}</p>
-            <ul>${featuresHTML}</ul>
-        `;
-        
-        // Set up for dramatic entrance
-        contentDiv.classList.remove('fade-out');
-        contentDiv.classList.add('fade-in-prepare');
-        
-        // Phase 3: Dramatic fade in with slight delay
-        setTimeout(() => {
-            contentDiv.classList.remove('fade-in-prepare');
-        }, 50); // Brief pause before entrance
-        
-    }, 300); // Wait for fade out to mostly complete
 }
 
 function updateScrollIndicator() {
     const progressElement = document.getElementById('scroll-progress');
-    const progress = (currentScrollPosition / (totalPositions - 1)) * 100; // 0-8 mapped to 0-100%
+    const progress = (currentScrollPosition / (totalPositions - 1)) * 100;
     progressElement.style.height = `${progress}%`;
-}
-
-function drawDebugInfo() {
-    // Debug info
-    fill(0);
-    textSize(14);
-    text(`State: ${getStateName()}`, 10, 20);
-    text(`Animation Progress: ${animationProgress.toFixed(3)}`, 10, 40);
-    text(`Scroll Position: ${currentScrollPosition} (${getPositionName()})`, 10, 60);
-    text(`Active Card: ${currentActiveCard}`, 10, 80);
-    text(`Card Transition: ${cardTransitionProgress.toFixed(3)}`, 10, 100);
-    text(`Scroll Blocked: ${scrollBlocked}`, 10, 120);
-    text(`Time until unblock: ${scrollBlocked ? Math.max(0, scrollDebounceDelay - (millis() - lastScrollTime)) : 0}ms`, 10, 140);
-    text(`Canvas: ${width}x${canvasHeight}`, 10, 160);
-}
-
-function getStateName() {
-    switch(currentState) {
-        case GRID_STATE: return 'GRID';
-        case ANIMATING_TO_STACK: return 'ANIMATING_TO_STACK';
-        case STACKED_STATE: return 'STACKED';
-        case ANIMATING_TO_GRID: return 'ANIMATING_TO_GRID';
-        default: return 'UNKNOWN';
-    }
 }
 
 function windowResized() {
     canvasHeight = window.innerHeight - 120;
-    calculateScaleFactor(); // Recalculate responsive scaling
+    calculateScaleFactor();
     resizeCanvas(windowWidth, canvasHeight);
     setupCardGrid();
     
-    // Update existing card sizes
     for (let card of cards) {
         card.updateSizes();
     }
