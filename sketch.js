@@ -93,29 +93,21 @@ let cardImages = [];
 let cards = [];
 let currentState = GRID_STATE;
 let animationProgress = 0;
-let animationSpeed = 0.015; // Slower for more premium feel
-let currentActiveCard = 0;
-let previousActiveCard = 0;
-let cardTransitionProgress = 0;
-let cardTransitionPhase = 0;
+let animationSpeed = 0.015;
 let canvasHeight = 0;
 
-// Smooth scrolling variables
-let smoothScrollProgress = 0; // Continuous scroll progress (0-7 for smooth interpolation)
-let targetScrollProgress = 0;
-
-// Discrete scroll system
-let currentScrollPosition = 0; // 0 = grid, 1-8 = individual cards
+// Continuous scrolling system
+let scrollPosition = 0; // Continuous: 0 = grid, 1-8 = service cards
+let targetScrollPosition = 0;
+let scrollVelocity = 0;
 let lastScrollTime = 0;
-let scrollDebounceDelay = 100; // Shorter delay for more responsive text scrolling
-let scrollBlocked = false;
-const totalPositions = 9; // Grid + 8 cards
+let scrollSensitivity = 0.003; // Slightly increased for better control through all 8 services
 
 // Responsive scaling variables
 let baseCardSize = 240;
 let baseTargetSize = 480;
 let scaleFactor = 1;
-let sizeLimit = 1.2; // Maximum scale factor
+let sizeLimit = 1.2;
 
 function calculateScaleFactor() {
     const baseWidth = 1200;
@@ -156,17 +148,11 @@ class Card {
         this.elevation = 0;
         this.glowIntensity = 0;
         this.trailPositions = [];
-        this.animationDelay = 0;
     }
     
     updateSizes() {
         this.size = baseCardSize;
         this.targetSize = baseTargetSize;
-        if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
-            this.currentSize = this.targetSize;
-        } else {
-            this.currentSize = this.size;
-        }
     }
     
     update() {
@@ -190,24 +176,10 @@ class Card {
         
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
-        let targetX, targetY;
         
-        if (this.index === currentActiveCard) {
-            targetX = baseX;
-            targetY = baseY;
-        } else if (this.index > currentActiveCard) {
-            const offset = (this.index - currentActiveCard);
-            const stackOffset = offset * 8 * scaleFactor;
-            const depthOffset = offset * 3 * scaleFactor;
-            targetX = baseX + stackOffset;
-            targetY = baseY + depthOffset;
-        } else {
-            const offset = (currentActiveCard - this.index);
-            const stackOffset = offset * 5 * scaleFactor;
-            const depthOffset = offset * 2 * scaleFactor;
-            targetX = baseX - stackOffset;
-            targetY = baseY + depthOffset;
-        }
+        // All cards aim for the center initially
+        const targetX = baseX;
+        const targetY = baseY;
         
         const t = easeInOutCubic(adjustedProgress);
         const midPointX = (this.startX + targetX) / 2 + Math.sin(adjustedProgress * Math.PI) * 40;
@@ -243,10 +215,8 @@ class Card {
             return;
         }
         
-        const magneticOffset = (this.index % 4 - 1.5) * 8;
-        const verticalOffset = (Math.floor(this.index / 4) - 0.5) * 6;
-        const startStackX = width * 0.25 + magneticOffset;
-        const startStackY = canvasHeight * 0.5 + verticalOffset;
+        const startStackX = width * 0.25;
+        const startStackY = canvasHeight * 0.5;
         
         const t = easeInOutCubic(adjustedProgress);
         const curveT = easeOutCubic(adjustedProgress);
@@ -274,51 +244,69 @@ class Card {
         
         this.currentSize = this.targetSize;
         
-        if (this.index === currentActiveCard) {
-            this.x = baseX;
-            this.y = baseY;
-            this.alpha = 255;
-            this.rotation = 0;
-            this.scale = 1.0 + Math.sin(millis() * 0.001) * 0.01;
-            this.elevation = 8;
-            
-        } else if (this.index === previousActiveCard && cardTransitionProgress < 1.0) {
-            const t = easeInOutCubic(cardTransitionProgress);
-            const slideDistance = 150 * scaleFactor;
-            
-            if (cardTransitionProgress < 0.3) {
-                const phase1 = cardTransitionProgress / 0.3;
-                const liftT = easeOutCubic(phase1);
+        // Calculate current active card and transition progress from continuous scroll
+        let currentCard, nextCard, transitionProgress;
+        
+        if (scrollPosition <= 1) {
+            // First card (index 0)
+            currentCard = 0;
+            nextCard = 1;
+            transitionProgress = Math.max(0, scrollPosition - 1);
+        } else if (scrollPosition >= 8) {
+            // Last card (index 7)
+            currentCard = 7;
+            nextCard = 7;
+            transitionProgress = 0;
+        } else {
+            // Between cards
+            currentCard = Math.floor(scrollPosition - 1);
+            nextCard = Math.min(7, currentCard + 1);
+            transitionProgress = (scrollPosition - 1) - currentCard;
+        }
+        
+        // Clamp values to valid ranges
+        currentCard = Math.max(0, Math.min(7, currentCard));
+        nextCard = Math.max(0, Math.min(7, nextCard));
+        transitionProgress = Math.max(0, Math.min(1, transitionProgress));
+        
+        if (this.index === currentCard) {
+            // Current active card
+            if (transitionProgress < 0.3) {
+                // Stable in center
                 this.x = baseX;
-                this.y = baseY - (20 * liftT);
-                this.rotation = -5 * liftT;
-                this.scale = 1.0 + (0.05 * liftT);
+                this.y = baseY;
                 this.alpha = 255;
-                this.elevation = 8 + (4 * liftT);
-                
-            } else if (cardTransitionProgress < 0.8) {
-                const phase2 = (cardTransitionProgress - 0.3) / 0.5;
-                const slideT = easeInOutCubic(phase2);
-                this.x = baseX + (slideDistance * slideT);
-                this.y = baseY - 20 - (slideDistance * 0.2 * slideT);
-                this.rotation = -5 - (10 * slideT);
-                this.scale = 1.05 - (0.3 * slideT);
-                this.alpha = 255 * (1 - slideT * 0.7);
-                this.elevation = 12 - (8 * slideT);
-                
+                this.rotation = 0;
+                this.scale = 1.0 + Math.sin(millis() * 0.001) * 0.01;
+                this.elevation = 8;
             } else {
-                const phase3 = (cardTransitionProgress - 0.8) / 0.2;
-                const fadeT = easeOutCubic(phase3);
-                this.x = baseX + slideDistance;
-                this.y = baseY - 20 - (slideDistance * 0.2);
-                this.rotation = -15;
-                this.scale = 0.75;
-                this.alpha = 255 * 0.3 * (1 - fadeT);
-                this.elevation = 2;
+                // Transitioning out faster
+                const exitProgress = (transitionProgress - 0.3) / 0.7;
+                const slideDistance = 150 * scaleFactor;
+                
+                this.x = baseX + (slideDistance * exitProgress);
+                this.y = baseY - (20 * exitProgress);
+                this.rotation = -15 * exitProgress;
+                this.scale = 1.0 - (0.25 * exitProgress);
+                this.alpha = 255 * (1 - exitProgress * 0.7);
+                this.elevation = 8 - (6 * exitProgress);
             }
             
-        } else if (this.index > currentActiveCard) {
-            const offset = (this.index - currentActiveCard);
+        } else if (this.index === nextCard && transitionProgress > 0.3) {
+            // Next card coming in faster
+            const enterProgress = (transitionProgress - 0.3) / 0.7;
+            const slideDistance = 150 * scaleFactor;
+            
+            this.x = baseX - slideDistance + (slideDistance * enterProgress);
+            this.y = baseY + 30 - (30 * enterProgress);
+            this.rotation = 15 - (15 * enterProgress);
+            this.scale = 0.8 + (0.2 * enterProgress);
+            this.alpha = 255 * (0.3 + 0.7 * enterProgress);
+            this.elevation = 2 + (6 * enterProgress);
+            
+        } else if (this.index > currentCard) {
+            // Cards ahead in stack
+            const offset = (this.index - currentCard);
             const stackOffset = offset * 8 * scaleFactor;
             const depthOffset = offset * 3 * scaleFactor;
             
@@ -330,7 +318,8 @@ class Card {
             this.elevation = Math.max(1, 6 - offset);
             
         } else {
-            const offset = (currentActiveCard - this.index);
+            // Cards behind in stack
+            const offset = (currentCard - this.index);
             const stackOffset = offset * 5 * scaleFactor;
             const depthOffset = offset * 2 * scaleFactor;
             
@@ -407,8 +396,12 @@ class Card {
             pop();
         }
         
-        // Card background
-        if (this.index === currentActiveCard && currentState === STACKED_STATE) {
+        // Card background with current card highlighting
+        const currentServiceIndex = Math.max(0, Math.min(7, Math.round(scrollPosition - 1)));
+        const isCurrentCard = scrollPosition >= 1 && scrollPosition <= 8 && 
+                              this.index === currentServiceIndex;
+        
+        if (isCurrentCard && currentState === STACKED_STATE) {
             drawingContext.save();
             const gradient = drawingContext.createLinearGradient(
                 -this.currentSize/2, -this.currentSize/2,
@@ -538,13 +531,21 @@ function draw() {
         background(0, 22, 48);
     }
     
-    if (scrollBlocked && millis() - lastScrollTime > scrollDebounceDelay) {
-        scrollBlocked = false;
+    // Update continuous scrolling
+    updateContinuousScrolling();
+    
+    // Handle state transitions
+    if (scrollPosition <= 0.1) {
+        if (currentState === STACKED_STATE) {
+            startTransformToGrid();
+        }
+    } else if (scrollPosition >= 0.9) {
+        if (currentState === GRID_STATE) {
+            startTransformToStack();
+        }
     }
     
-    updateDiscreteScrolling();
-    updateSmoothScrolling();
-    
+    // Update animation progress
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         animationProgress += animationSpeed;
         
@@ -561,18 +562,13 @@ function draw() {
         }
     }
     
-    if (cardTransitionProgress < 1.0) {
-        cardTransitionProgress += 0.012;
-        if (cardTransitionProgress >= 1.0) {
-            cardTransitionProgress = 1.0;
-        }
-    }
-    
+    // Sort cards for proper drawing order
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
+        const currentCard = Math.floor(Math.max(0, scrollPosition - 1));
         sortedCards.sort((a, b) => {
-            if (a.index === currentActiveCard) return 1;
-            if (b.index === currentActiveCard) return -1;
+            if (a.index === currentCard) return 1;
+            if (b.index === currentCard) return -1;
             return a.index - b.index;
         });
     } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
@@ -583,16 +579,71 @@ function draw() {
         });
     }
     
+    // Update and draw cards
     for (let card of sortedCards) {
         card.update();
         card.draw();
     }
     
+    // Draw ambient particles during transitions
     if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         drawAmbientParticles();
     }
     
+    // Update scroll indicator and text position
     updateScrollIndicator();
+    updateTextPosition();
+}
+
+function updateContinuousScrolling() {
+    // Smooth interpolation to target
+    const lerpSpeed = 0.15;
+    scrollPosition = lerp(scrollPosition, targetScrollPosition, lerpSpeed);
+    
+    // Apply velocity damping
+    scrollVelocity *= 0.95;
+}
+
+function updateTextPosition() {
+    if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
+        const servicesContainer = document.getElementById('services-container');
+        
+        // Calculate text scroll position
+        // When scrollPosition = 1, show service 0 (0% scroll)
+        // When scrollPosition = 2, show service 1 (-12.5% scroll)
+        // When scrollPosition = 8, show service 7 (-87.5% scroll)
+        if (scrollPosition >= 1) {
+            const serviceProgress = Math.min(7, scrollPosition - 1); // 0-7 continuously
+            const scrollPercent = -(serviceProgress * 12.5); // Each service is 12.5% apart
+            servicesContainer.style.transform = `translateY(calc(${scrollPercent}% + 2850px))`;
+        } else {
+            servicesContainer.style.transform = `translateY(0%)`;
+        }
+    }
+}
+
+function handleWheel(event) {
+    event.preventDefault();
+    
+    const scrollDelta = event.deltaY * scrollSensitivity;
+    
+    // Update target position
+    targetScrollPosition += scrollDelta;
+    targetScrollPosition = Math.max(0, Math.min(8, targetScrollPosition));
+    
+    // Add some velocity for more natural feel
+    scrollVelocity += scrollDelta * 0.5;
+    
+    lastScrollTime = millis();
+    
+    // Debug: Show which service should be active
+    if (scrollPosition >= 1 && scrollPosition <= 8) {
+        const serviceIndex = Math.round(scrollPosition - 1);
+        const serviceName = services[serviceIndex]?.title || 'Unknown';
+        console.log(`Scroll: ${scrollPosition.toFixed(2)} -> Service ${serviceIndex}: ${serviceName}`);
+    } else {
+        console.log(`Scroll position: ${scrollPosition.toFixed(2)} (Grid view)`);
+    }
 }
 
 function drawPremiumBackground() {
@@ -641,70 +692,6 @@ function drawAmbientParticles() {
     }
 }
 
-function updateDiscreteScrolling() {
-    if (currentScrollPosition === 0) {
-        if (currentState === STACKED_STATE) {
-            startTransformToGrid();
-        }
-    } else {
-        if (currentState === GRID_STATE) {
-            startTransformToStack();
-        }
-        
-        const targetCard = currentScrollPosition - 1;
-        if (targetCard !== currentActiveCard && cardTransitionProgress >= 1.0) {
-            previousActiveCard = currentActiveCard;
-            currentActiveCard = targetCard;
-            cardTransitionProgress = 0;
-        }
-    }
-}
-
-function updateSmoothScrolling() {
-    // Update smooth scroll progress for text content
-    if (currentScrollPosition === 0) {
-        targetScrollProgress = 0;
-    } else {
-        targetScrollProgress = currentScrollPosition - 1; // 0-7 for services
-    }
-    
-    // Smooth interpolation to target
-    const lerpSpeed = 0.12; // Adjust for smoothness vs responsiveness
-    smoothScrollProgress = lerp(smoothScrollProgress, targetScrollProgress, lerpSpeed);
-    
-    // Update the services container transform
-    if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
-        const servicesContainer = document.getElementById('services-container');
-        const scrollPercent = -(smoothScrollProgress / 7) * 100; // Convert to percentage for transform
-        servicesContainer.style.transform = `translateY(${scrollPercent}%)`;
-    }
-}
-
-function handleWheel(event) {
-    event.preventDefault();
-    
-    if (scrollBlocked) {
-        return;
-    }
-    
-    const scrollDirection = event.deltaY > 0 ? 1 : -1;
-    const newPosition = currentScrollPosition + scrollDirection;
-    currentScrollPosition = Math.max(0, Math.min(totalPositions - 1, newPosition));
-    
-    scrollBlocked = true;
-    lastScrollTime = millis();
-    
-    console.log(`Scroll position: ${currentScrollPosition} (${getPositionName()}) - Smooth progress: ${smoothScrollProgress.toFixed(2)}`);
-}
-
-function getPositionName() {
-    if (currentScrollPosition === 0) {
-        return "Grid View";
-    } else {
-        return `Card ${currentScrollPosition}: ${services[currentScrollPosition - 1].title}`;
-    }
-}
-
 function startTransformToStack() {
     if (currentState !== GRID_STATE) return;
     
@@ -714,10 +701,9 @@ function startTransformToStack() {
     for (let card of cards) {
         card.glowIntensity = 0;
         card.trailPositions = [];
-        card.animationDelay = card.index * 0.08;
     }
     
-    console.log('Starting premium transform to stack');
+    console.log('Starting transform to stack');
 }
 
 function startTransformToGrid() {
@@ -725,11 +711,8 @@ function startTransformToGrid() {
     
     currentState = ANIMATING_TO_GRID;
     animationProgress = 0;
-    currentActiveCard = 0;
-    previousActiveCard = 0;
-    cardTransitionProgress = 1.0;
-    smoothScrollProgress = 0;
-    targetScrollProgress = 0;
+    scrollPosition = 0;
+    targetScrollPosition = 0;
     
     for (let card of cards) {
         card.rotation = 0;
@@ -739,12 +722,12 @@ function startTransformToGrid() {
         card.trailPositions = [];
     }
     
-    console.log('Starting premium transform to grid');
+    console.log('Starting transform to grid');
 }
 
 function updateScrollIndicator() {
     const progressElement = document.getElementById('scroll-progress');
-    const progress = (currentScrollPosition / (totalPositions - 1)) * 100;
+    const progress = (scrollPosition / 8) * 100;
     progressElement.style.height = `${progress}%`;
 }
 
