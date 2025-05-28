@@ -101,7 +101,7 @@ let scrollPosition = 0; // Continuous: 0 = grid, 1-8 = service cards
 let targetScrollPosition = 0;
 let scrollVelocity = 0;
 let lastScrollTime = 0;
-let scrollSensitivity = 0.004; // Slightly increased for better control
+let scrollSensitivity = 0.005; // Slightly increased for better control with smooth fades
 
 // Responsive scaling variables
 let baseCardSize = 240;
@@ -243,77 +243,96 @@ class Card {
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         
-        // Calculate which card should be active based on scroll position
-        let activeCardIndex;
+        // Calculate current and next card indices with smooth transitions
+        let currentCardIndex, nextCardIndex;
+        let transitionProgress = 0;
+        
         if (scrollPosition <= 1) {
-            activeCardIndex = 0;
+            currentCardIndex = 0;
+            nextCardIndex = 0;
+            transitionProgress = 0;
         } else if (scrollPosition >= 8) {
-            activeCardIndex = 7;
+            currentCardIndex = 7;
+            nextCardIndex = 7;
+            transitionProgress = 0;
         } else {
-            activeCardIndex = Math.floor(scrollPosition - 1);
+            const scrollProgress = scrollPosition - 1; // 0-7 range
+            currentCardIndex = Math.floor(scrollProgress);
+            nextCardIndex = Math.min(7, currentCardIndex + 1);
+            transitionProgress = scrollProgress - currentCardIndex; // 0-1 transition between cards
         }
         
-        // Calculate transition progress for smoother card changes
-        const transitionProgress = scrollPosition >= 1 ? (scrollPosition - 1) % 1 : 0;
-        
-        if (this.index === activeCardIndex) {
-            // Current active card - full size at front
+        // Smooth fade transition between current and next card
+        if (this.index === currentCardIndex) {
+            // Current active card - fades out as we transition to next
             this.x = baseX;
             this.y = baseY;
             this.currentSize = this.targetSize;
-            this.alpha = 255;
             this.rotation = 0;
             this.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005; // Subtle breathing
             this.elevation = 12;
             
-            // Smooth transition out when scrolling to next
-            if (transitionProgress > 0.7 && activeCardIndex < 7) {
-                const exitProgress = (transitionProgress - 0.7) / 0.3;
-                this.alpha = 255 * (1 - exitProgress * 0.3);
-                this.elevation = 12 - (exitProgress * 2);
+            // Smooth fade out during transition
+            if (transitionProgress > 0 && currentCardIndex < 7) {
+                const fadeOutProgress = Math.min(1, transitionProgress * 2); // Fade faster
+                this.alpha = 255 * (1 - fadeOutProgress * 0.8); // Fade to 20% opacity
+                this.elevation = 12 - (fadeOutProgress * 3);
+                this.scale = (1.0 + Math.sin(millis() * 0.0008) * 0.005) * (1 - fadeOutProgress * 0.1);
+            } else {
+                this.alpha = 255;
             }
             
+        } else if (this.index === nextCardIndex && transitionProgress > 0 && currentCardIndex < 7) {
+            // Next card - fades in as we transition
+            this.x = baseX;
+            this.y = baseY;
+            this.currentSize = this.targetSize;
+            this.rotation = 0;
+            this.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005;
+            this.elevation = 12;
+            
+            // Smooth fade in during transition
+            const fadeInProgress = Math.min(1, transitionProgress * 2); // Fade faster
+            this.alpha = 255 * fadeInProgress * 0.8 + 51; // Fade from 20% to 100% opacity
+            this.elevation = 3 + (fadeInProgress * 9);
+            this.scale = (1.0 + Math.sin(millis() * 0.0008) * 0.005) * (0.9 + fadeInProgress * 0.1);
+            
         } else {
-            // Cards in the stack behind the active card
-            const stackPosition = this.index - activeCardIndex;
+            // Cards in the stack behind the active cards
+            const activeCard = transitionProgress > 0.5 ? nextCardIndex : currentCardIndex;
+            const stackPosition = this.index - activeCard;
             
             if (stackPosition > 0) {
                 // Cards ahead in the stack (not yet shown)
-                const depthFactor = Math.min(stackPosition, 5); // Limit depth effect
-                const scaleReduction = 1 - (depthFactor * 0.12); // Each card 12% smaller
-                const yOffset = -depthFactor * 8; // Move up slightly for each layer
+                const depthFactor = Math.min(stackPosition, 6); // Limit depth effect
+                const scaleReduction = 1 - (depthFactor * 0.15); // Each card 15% smaller
                 
                 this.x = baseX;
-                this.y = baseY + yOffset;
                 this.currentSize = this.targetSize * scaleReduction;
-                this.alpha = Math.max(40, 200 - (depthFactor * 30));
+                this.alpha = Math.max(25, 180 - (depthFactor * 35));
                 this.rotation = 0;
                 this.scale = 1.0;
-                this.elevation = Math.max(1, 10 - depthFactor);
+                this.elevation = Math.max(1, 8 - depthFactor);
                 
-                // Show only the top edge of stacked cards
-                if (depthFactor > 1) {
-                    this.y = baseY - (this.targetSize * 0.45) + (depthFactor * 12);
-                }
+                // Minimize visible protrusion - cards barely peek out
+                const protrusionAmount = Math.max(3, 8 - depthFactor * 2); // Much smaller protrusion
+                this.y = baseY - (this.targetSize * 0.48) + (depthFactor * protrusionAmount);
                 
             } else {
                 // Cards behind the active card (already shown)
                 const behindDepth = Math.abs(stackPosition);
-                const scaleReduction = 1 - (behindDepth * 0.08);
-                const yOffset = behindDepth * 6;
+                const scaleReduction = 1 - (behindDepth * 0.1);
                 
                 this.x = baseX;
-                this.y = baseY + yOffset;
                 this.currentSize = this.targetSize * scaleReduction;
-                this.alpha = Math.max(20, 150 - (behindDepth * 25));
+                this.alpha = Math.max(15, 120 - (behindDepth * 30));
                 this.rotation = 0;
                 this.scale = 1.0;
-                this.elevation = Math.max(0, 8 - behindDepth);
+                this.elevation = Math.max(0, 6 - behindDepth);
                 
-                // Position behind cards to show just the top
-                if (behindDepth > 1) {
-                    this.y = baseY - (this.targetSize * 0.45) + (behindDepth * 10);
-                }
+                // Position behind cards with minimal protrusion
+                const protrusionAmount = Math.max(2, 6 - behindDepth);
+                this.y = baseY - (this.targetSize * 0.48) + (behindDepth * protrusionAmount);
             }
         }
     }
@@ -383,10 +402,16 @@ class Card {
         }
         
         // Card background with enhanced active card highlighting
-        const activeCardIndex = scrollPosition >= 1 ? Math.floor(scrollPosition - 1) : 0;
-        const isActiveCard = this.index === activeCardIndex && currentState === STACKED_STATE;
+        const scrollProgress = Math.max(0, scrollPosition - 1);
+        const currentCardIndex = Math.floor(scrollProgress);
+        const nextCardIndex = Math.min(7, currentCardIndex + 1);
+        const transitionProgress = scrollProgress - currentCardIndex;
         
-        if (isActiveCard) {
+        const isActiveCard = (this.index === currentCardIndex) || 
+                            (this.index === nextCardIndex && transitionProgress > 0 && currentCardIndex < 7);
+        const isCurrentlyDisplayed = currentState === STACKED_STATE && isActiveCard;
+        
+        if (isCurrentlyDisplayed) {
             drawingContext.save();
             const gradient = drawingContext.createLinearGradient(
                 -this.currentSize/2, -this.currentSize/2,
@@ -408,8 +433,9 @@ class Card {
             drawingContext.restore();
         } else {
             const borderGlow = this.glowIntensity > 3 ? this.glowIntensity / 5 : 0;
+            const baseOpacity = isCurrentlyDisplayed ? 80 : 30; // Slightly brighter for transitioning cards
             fill(255, this.alpha);
-            stroke(102, 126, 234, Math.min(80, 30 + borderGlow) * (this.alpha / 255));
+            stroke(102, 126, 234, Math.min(80, baseOpacity + borderGlow) * (this.alpha / 255));
             strokeWeight(1 + (this.glowIntensity / 50));
             rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 12);
         }
@@ -550,12 +576,27 @@ function draw() {
     // Sort cards for proper drawing order (back to front)
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
-        const activeCard = Math.floor(Math.max(0, scrollPosition - 1));
-        // Sort so active card is drawn last (on top)
+        // During stacked state, handle both current and transitioning cards
+        const scrollProgress = Math.max(0, scrollPosition - 1);
+        const currentCard = Math.floor(scrollProgress);
+        const nextCard = Math.min(7, currentCard + 1);
+        const transitionProgress = scrollProgress - currentCard;
+        
         sortedCards.sort((a, b) => {
-            if (a.index === activeCard) return 1;
-            if (b.index === activeCard) return -1;
-            // For other cards, draw in order with higher indices last
+            // Both current and next card (during transition) should be drawn on top
+            const aIsActive = (a.index === currentCard) || (a.index === nextCard && transitionProgress > 0);
+            const bIsActive = (b.index === currentCard) || (b.index === nextCard && transitionProgress > 0);
+            
+            if (aIsActive && !bIsActive) return 1;
+            if (bIsActive && !aIsActive) return -1;
+            if (aIsActive && bIsActive) {
+                // During transition, next card should be drawn on top of current card
+                if (transitionProgress > 0.5) {
+                    return a.index === nextCard ? 1 : -1;
+                } else {
+                    return a.index === currentCard ? 1 : -1;
+                }
+            }
             return a.index - b.index;
         });
     } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
@@ -584,33 +625,42 @@ function draw() {
 }
 
 function updateContinuousScrolling() {
-    // Smooth interpolation to target with faster response
-    const lerpSpeed = 0.18;
+    // Smooth interpolation to target with optimized response for fade transitions
+    const lerpSpeed = 0.2; // Slightly faster for smoother fades
     scrollPosition = lerp(scrollPosition, targetScrollPosition, lerpSpeed);
     
     // Apply velocity damping
-    scrollVelocity *= 0.92;
+    scrollVelocity *= 0.9;
 }
 
 function updateTextPosition() {
     if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
         const servicesContainer = document.getElementById('services-container');
         
-        // Improved text synchronization
+        // Improved text synchronization with smooth card transitions
         if (scrollPosition >= 1) {
-            // Map scroll position to text position more precisely
-            const activeServiceIndex = Math.max(0, Math.min(7, Math.floor(scrollPosition - 1)));
-            const scrollPercent = -(activeServiceIndex * 12.5); // Each service is 12.5% apart
+            // Calculate text position with smooth interpolation
+            const scrollProgress = scrollPosition - 1; // 0-7 range
+            const currentServiceIndex = Math.floor(scrollProgress);
+            const nextServiceIndex = Math.min(7, currentServiceIndex + 1);
+            const transitionProgress = scrollProgress - currentServiceIndex;
             
-            // Add smooth interpolation for text transitions
-            const transitionProgress = (scrollPosition - 1) % 1;
-            if (transitionProgress > 0 && activeServiceIndex < 7) {
-                const nextScrollPercent = -((activeServiceIndex + 1) * 12.5);
-                const interpolatedPercent = scrollPercent + (nextScrollPercent - scrollPercent) * transitionProgress;
-                servicesContainer.style.transform = `translateY(calc(${interpolatedPercent}% + 2850px))`;
+            // Smooth text transition that matches card fade timing
+            let textPosition;
+            if (transitionProgress > 0 && currentServiceIndex < 7) {
+                // During transition, move text smoothly between services
+                const textTransitionSpeed = 2; // Matches card fade speed
+                const textProgress = Math.min(1, transitionProgress * textTransitionSpeed);
+                
+                const currentPercent = -(currentServiceIndex * 12.5);
+                const nextPercent = -(nextServiceIndex * 12.5);
+                textPosition = currentPercent + (nextPercent - currentPercent) * textProgress;
             } else {
-                servicesContainer.style.transform = `translateY(calc(${scrollPercent}% + 2850px))`;
+                // Static position when not transitioning
+                textPosition = -(currentServiceIndex * 12.5);
             }
+            
+            servicesContainer.style.transform = `translateY(calc(${textPosition}% + 2850px))`;
         } else {
             servicesContainer.style.transform = `translateY(2850px)`;
         }
