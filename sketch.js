@@ -243,97 +243,63 @@ class Card {
         const baseX = width * 0.25;
         const baseY = canvasHeight * 0.5;
         
-        // Calculate current and next card indices with smooth transitions
-        let currentCardIndex, nextCardIndex;
-        let transitionProgress = 0;
-        
+        // Calculate which card should be active - no transitions, instant switching
+        let activeCardIndex;
         if (scrollPosition <= 1) {
-            currentCardIndex = 0;
-            nextCardIndex = 0;
-            transitionProgress = 0;
+            activeCardIndex = 0;
         } else if (scrollPosition >= 8) {
-            currentCardIndex = 7;
-            nextCardIndex = 7;
-            transitionProgress = 0;
+            activeCardIndex = 7;
         } else {
-            const scrollProgress = scrollPosition - 1; // 0-7 range
-            currentCardIndex = Math.floor(scrollProgress);
-            nextCardIndex = Math.min(7, currentCardIndex + 1);
-            transitionProgress = scrollProgress - currentCardIndex; // 0-1 transition between cards
+            activeCardIndex = Math.floor(scrollPosition - 1);
         }
         
-        // Smooth fade transition between current and next card
-        if (this.index === currentCardIndex) {
-            // Current active card - fades out as we transition to next
+        if (this.index === activeCardIndex) {
+            // Current active card - always at center, full size
             this.x = baseX;
             this.y = baseY;
             this.currentSize = this.targetSize;
             this.rotation = 0;
             this.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005; // Subtle breathing
             this.elevation = 12;
+            this.alpha = 255;
             
-            // Smooth fade out during transition
-            if (transitionProgress > 0 && currentCardIndex < 7) {
-                const fadeOutProgress = Math.min(1, transitionProgress * 2); // Fade faster
-                this.alpha = 255 * (1 - fadeOutProgress * 0.8); // Fade to 20% opacity
-                this.elevation = 12 - (fadeOutProgress * 3);
-                this.scale = (1.0 + Math.sin(millis() * 0.0008) * 0.005) * (1 - fadeOutProgress * 0.1);
+        } else if (this.index < activeCardIndex) {
+            // ALL cards that have been passed should be in the stack behind
+            // Only show if we've moved past the first card
+            if (scrollPosition > 1.1) {
+                const behindDepth = activeCardIndex - this.index; // How many cards behind the active one
+                const scaleReduction = 1 - (behindDepth * 0.08);
+                
+                this.currentSize = this.targetSize * scaleReduction;
+                this.alpha = 255; // Always full opacity
+                this.rotation = 0;
+                this.scale = 1.0;
+                this.elevation = Math.max(1, 6 - behindDepth);
+                
+                // Create stacked effect - each card at different position
+                const stackOffset = behindDepth * 8; // Horizontal offset for stack effect
+                const verticalOffset = this.targetSize * 0.13 + (7-this.index)*10; // Base vertical offset
+                const layerSpacing = behindDepth * 6; // Vertical spacing between layers
+                
+                // Position each card in the stack
+                this.x = baseX - stackOffset;
+                this.y = baseY - verticalOffset + layerSpacing;
             } else {
-                this.alpha = 255;
+                // Hide behind cards until we move past first card
+                this.alpha = 0;
+                this.x = baseX;
+                this.y = baseY;
+                this.currentSize = this.targetSize;
+                this.elevation = 0;
             }
             
-        } else if (this.index === nextCardIndex && transitionProgress > 0 && currentCardIndex < 7) {
-            // Next card - fades in as we transition
+        } else {
+            // Cards ahead of the active card (not yet shown) - keep them hidden
+            this.alpha = 0;
             this.x = baseX;
             this.y = baseY;
             this.currentSize = this.targetSize;
-            this.rotation = 0;
-            this.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005;
-            this.elevation = 12;
-            
-            // Smooth fade in during transition
-            const fadeInProgress = Math.min(1, transitionProgress * 2); // Fade faster
-            this.alpha = 255 * fadeInProgress * 0.8 + 51; // Fade from 20% to 100% opacity
-            this.elevation = 3 + (fadeInProgress * 9);
-            this.scale = (1.0 + Math.sin(millis() * 0.0008) * 0.005) * (0.9 + fadeInProgress * 0.1);
-            
-        } else {
-            // Cards in the stack behind the active cards
-            const activeCard = transitionProgress > 0.5 ? nextCardIndex : currentCardIndex;
-            const stackPosition = this.index - activeCard;
-            
-            if (stackPosition > 0) {
-                // Cards ahead in the stack (not yet shown)
-                const depthFactor = Math.min(stackPosition, 6); // Limit depth effect
-                const scaleReduction = 1 - (depthFactor * 0.15); // Each card 15% smaller
-                
-                this.x = baseX;
-                this.currentSize = this.targetSize * scaleReduction;
-                this.alpha = Math.max(25, 180 - (depthFactor * 35));
-                this.rotation = 0;
-                this.scale = 1.0;
-                this.elevation = Math.max(1, 8 - depthFactor);
-                
-                // Minimize visible protrusion - cards barely peek out
-                const protrusionAmount = Math.max(3, 8 - depthFactor * 2); // Much smaller protrusion
-                this.y = baseY - (this.targetSize * 0.48) + (depthFactor * protrusionAmount);
-                
-            } else {
-                // Cards behind the active card (already shown)
-                const behindDepth = Math.abs(stackPosition);
-                const scaleReduction = 1 - (behindDepth * 0.1);
-                
-                this.x = baseX;
-                this.currentSize = this.targetSize * scaleReduction;
-                this.alpha = Math.max(15, 120 - (behindDepth * 30));
-                this.rotation = 0;
-                this.scale = 1.0;
-                this.elevation = Math.max(0, 6 - behindDepth);
-                
-                // Position behind cards with minimal protrusion
-                const protrusionAmount = Math.max(2, 6 - behindDepth);
-                this.y = baseY - (this.targetSize * 0.48) + (behindDepth * protrusionAmount);
-            }
+            this.elevation = 0;
         }
     }
     
@@ -422,21 +388,15 @@ class Card {
             gradient.addColorStop(1, `rgba(248, 250, 252, ${this.alpha / 255})`);
             
             drawingContext.fillStyle = gradient;
-            drawingContext.strokeStyle = `rgba(102, 126, 234, ${Math.min(120, 60 + this.glowIntensity/3) * (this.alpha / 255)})`;
-            drawingContext.lineWidth = 2.5;
             drawingContext.shadowColor = 'rgba(102, 126, 234, 0.25)';
             drawingContext.shadowBlur = 10;
             drawingContext.beginPath();
             drawingContext.roundRect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 12);
             drawingContext.fill();
-            drawingContext.stroke();
             drawingContext.restore();
         } else {
-            const borderGlow = this.glowIntensity > 3 ? this.glowIntensity / 5 : 0;
-            const baseOpacity = isCurrentlyDisplayed ? 80 : 30; // Slightly brighter for transitioning cards
             fill(255, this.alpha);
-            stroke(102, 126, 234, Math.min(80, baseOpacity + borderGlow) * (this.alpha / 255));
-            strokeWeight(1 + (this.glowIntensity / 50));
+            noStroke();
             rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 12);
         }
         
