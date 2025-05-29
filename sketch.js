@@ -160,9 +160,8 @@ class Card {
             this.animateToStack();
         } else if (currentState === ANIMATING_TO_GRID) {
             this.animateToGrid();
-        } else if (currentState === STACKED_STATE) {
-            this.updateInStack();
         }
+        // Removed updateInStack() call - now handled centrally
     }
     
     animateToStack() {
@@ -237,70 +236,6 @@ class Card {
         
         if (this.trailPositions.length > 3) this.trailPositions.shift();
         this.trailPositions.push({x: this.x, y: this.y, alpha: this.glowIntensity});
-    }
-    
-    updateInStack() {
-        const baseX = width * 0.25;
-        const baseY = canvasHeight * 0.5;
-        
-        // Calculate which card should be active - no transitions, instant switching
-        let activeCardIndex;
-        if (scrollPosition <= 1) {
-            activeCardIndex = 0;
-        } else if (scrollPosition >= 8) {
-            activeCardIndex = 7;
-        } else {
-            activeCardIndex = Math.floor(scrollPosition - 1);
-        }
-        
-        if (this.index === activeCardIndex) {
-            // Current active card - always at center, full size
-            this.x = baseX;
-            this.y = baseY;
-            this.currentSize = this.targetSize;
-            this.rotation = 0;
-            this.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005; // Subtle breathing
-            this.elevation = 12;
-            this.alpha = 255;
-            
-        } else if (this.index < activeCardIndex) {
-            // ALL cards that have been passed should be in the stack behind
-            // Only show if we've moved past the first card
-            if (scrollPosition > 1.1) {
-                const behindDepth = activeCardIndex - this.index; // How many cards behind the active one
-                const scaleReduction = 1 - (behindDepth * 0.08);
-                
-                this.currentSize = this.targetSize * scaleReduction;
-                this.alpha = 255; // Always full opacity
-                this.rotation = 0;
-                this.scale = 1.0;
-                this.elevation = Math.max(1, 6 - behindDepth);
-                
-                // Create stacked effect - each card at different position
-                const stackOffset = behindDepth * 8; // Horizontal offset for stack effect
-                const verticalOffset = this.targetSize * 0.13 + (7-this.index)*10; // Base vertical offset
-                const layerSpacing = behindDepth * 6; // Vertical spacing between layers
-                
-                // Position each card in the stack
-                this.x = baseX - stackOffset;
-                this.y = baseY - verticalOffset + layerSpacing;
-            } else {
-                // Hide behind cards until we move past first card
-                this.alpha = 0;
-                this.x = baseX;
-                this.y = baseY;
-                this.currentSize = this.targetSize;
-                this.elevation = 0;
-            }
-            
-        } else {
-            // Cards ahead of the active card (not yet shown) - keep them hidden
-            this.alpha = 0;
-            this.x = baseX;
-            this.y = baseY;
-            this.currentSize = this.targetSize;
-            this.elevation = 0;
-        }
     }
     
     draw() {
@@ -423,6 +358,73 @@ class Card {
     }
 }
 
+// Central function to handle all 8 cards explicitly in stack mode
+function updateAllCardsInStack() {
+    // This method now handles ALL 8 cards explicitly
+    const baseX = width * 0.25;
+    const baseY = canvasHeight * 0.5;
+    
+    // Calculate which card should be active
+    let activeCardIndex;
+    if (scrollPosition <= 1) {
+        activeCardIndex = 0;
+    } else if (scrollPosition >= 8) {
+        activeCardIndex = 7;
+    } else {
+        activeCardIndex = Math.floor(scrollPosition - 1);
+    }
+    
+    // Process all 8 cards explicitly - creating the push-back effect
+    for (let i = 0; i < 8; i++) {
+        const card = cards[i]; // Get the actual card object
+        
+        if (i === activeCardIndex) {
+            // THIS IS THE ACTIVE CARD - always at front center
+            card.x = baseX;
+            card.y = baseY;
+            card.currentSize = card.targetSize;
+            card.rotation = 0;
+            card.scale = 1.0 + Math.sin(millis() * 0.0008) * 0.005;
+            card.elevation = 12;
+            card.alpha = 255;
+            
+        } else if (i < activeCardIndex && scrollPosition > 1.1) {
+            // THIS CARD HAS BEEN PASSED - push it back in the stack
+            const stackDepth = activeCardIndex - i; // How far back this card should be (1, 2, 3, etc.)
+            
+            // Progressive scaling - each card gets smaller as it goes back
+            const scaleReduction = Math.pow(0.95, stackDepth); // Each card 5% smaller than the one in front
+            card.currentSize = card.targetSize * scaleReduction;
+            card.alpha = 255; // Keep full opacity
+            card.rotation = 0;
+            card.scale = 1.0;
+            card.elevation = Math.max(1, 12 - stackDepth);
+            
+            // CENTERED stacking - all cards stay centered horizontally
+            card.x = baseX; // Always centered
+            
+            // Push back effect - each card moves progressively up and back
+            const pushBackDistance = stackDepth * (card.targetSize * 0.04); // Each card pushes back by 8% of card height
+            const verticalOffset = card.targetSize * 0.007; // Base offset to show the stack
+            
+            card.y = baseY - verticalOffset - pushBackDistance; // Move up and back progressively
+            
+        } else {
+            // THIS CARD HASN'T BEEN REACHED YET - hide it
+            card.alpha = 0;
+            card.x = baseX;
+            card.y = baseY;
+            card.currentSize = card.targetSize;
+            card.elevation = 0;
+        }
+    }
+    
+    // Debug: Log the state every second
+    if (frameCount % 60 === 0) {
+        console.log(`Active: ${activeCardIndex}, Visible stack cards: ${cards.filter(c => c.alpha > 0 && cards.indexOf(c) < activeCardIndex).length}`);
+    }
+}
+
 function preload() {
     // Load card images
     for (let i = 1; i <= 8; i++) {
@@ -536,27 +538,13 @@ function draw() {
     // Sort cards for proper drawing order (back to front)
     let sortedCards = [...cards];
     if (currentState === STACKED_STATE) {
-        // During stacked state, handle both current and transitioning cards
-        const scrollProgress = Math.max(0, scrollPosition - 1);
-        const currentCard = Math.floor(scrollProgress);
-        const nextCard = Math.min(7, currentCard + 1);
-        const transitionProgress = scrollProgress - currentCard;
-        
+        // Draw cards in order: furthest behind first, active card last
+        const activeIndex = Math.floor(Math.max(0, scrollPosition - 1));
         sortedCards.sort((a, b) => {
-            // Both current and next card (during transition) should be drawn on top
-            const aIsActive = (a.index === currentCard) || (a.index === nextCard && transitionProgress > 0);
-            const bIsActive = (b.index === currentCard) || (b.index === nextCard && transitionProgress > 0);
-            
-            if (aIsActive && !bIsActive) return 1;
-            if (bIsActive && !aIsActive) return -1;
-            if (aIsActive && bIsActive) {
-                // During transition, next card should be drawn on top of current card
-                if (transitionProgress > 0.5) {
-                    return a.index === nextCard ? 1 : -1;
-                } else {
-                    return a.index === currentCard ? 1 : -1;
-                }
-            }
+            // Active card should be drawn last (on top)
+            if (a.index === activeIndex) return 1;
+            if (b.index === activeIndex) return -1;
+            // For all other cards, draw in normal order (lower index first)
             return a.index - b.index;
         });
     } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
@@ -569,6 +557,11 @@ function draw() {
     }
     
     // Update and draw cards
+    if (currentState === STACKED_STATE) {
+        // Handle all 8 cards centrally for stack mode
+        updateAllCardsInStack();
+    }
+    
     for (let card of sortedCards) {
         card.update();
         card.draw();
