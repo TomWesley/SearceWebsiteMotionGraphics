@@ -340,17 +340,29 @@ class Card {
             const brightnessBoost = this.glowIntensity > 5 ? 1.05 : 1.0;
             tint(255 * brightnessBoost, this.alpha);
             
+            drawingContext.save();
+            
+            // Base drop shadow - always present
+            const shadowOpacity = (this.alpha / 255) * 0.25;
+            const shadowOffset = Math.max(2, this.currentSize * 0.015);
+            const shadowBlur = Math.max(4, this.currentSize * 0.025);
+            
+            drawingContext.shadowColor = `rgba(0, 0, 0, ${shadowOpacity})`;
+            drawingContext.shadowOffsetX = shadowOffset * 0.7;
+            drawingContext.shadowOffsetY = shadowOffset;
+            drawingContext.shadowBlur = shadowBlur;
+            
+            // Enhanced glow shadow when glowing
             if (this.glowIntensity > 8) {
-                drawingContext.save();
-                drawingContext.shadowColor = 'rgba(102, 126, 234, 0.2)';
-                drawingContext.shadowBlur = this.glowIntensity / 10;
-                image(this.img, -this.currentSize/2, -this.currentSize/2, 
-                      this.currentSize, this.currentSize);
-                drawingContext.restore();
-            } else {
-                image(this.img, -this.currentSize/2, -this.currentSize/2, 
-                      this.currentSize, this.currentSize);
+                const glowShadowOpacity = Math.min(0.4, this.glowIntensity / 100);
+                drawingContext.shadowColor = `rgba(102, 126, 234, ${glowShadowOpacity})`;
+                drawingContext.shadowBlur = Math.max(shadowBlur, this.glowIntensity / 8);
             }
+            
+            image(this.img, -this.currentSize/2, -this.currentSize/2, 
+                  this.currentSize, this.currentSize);
+            
+            drawingContext.restore();
             noTint();
         }
         
@@ -404,10 +416,10 @@ function updateAllCardsInStack() {
             card.x = baseX; // Always centered
             
             // Push back effect - each card moves progressively up and back
-            const pushBackDistance = stackDepth * (card.targetSize * 0.04); // Each card pushes back by 8% of card height
-            const verticalOffset = card.targetSize * 0.007; // Base offset to show the stack
+            const pushBackDistance = sqrt(stackDepth) * (card.targetSize * 0.1); // Each card pushes back by 8% of card height
+            const verticalOffset = card.targetSize * 0.005; // Base offset to show the stack
             
-            card.y = baseY - verticalOffset - pushBackDistance; // Move up and back progressively
+            card.y =35+baseY - verticalOffset - pushBackDistance; // Move up and back progressively
             
         } else {
             // THIS CARD HASN'T BEEN REACHED YET - hide it
@@ -613,7 +625,7 @@ function updateTextPosition() {
                 textPosition = -(currentServiceIndex * 12.5);
             }
             
-            servicesContainer.style.transform = `translateY(calc(${textPosition}% + 2850px))`;
+            servicesContainer.style.transform = `translateY(calc(${textPosition}% + 2700px))`;
         } else {
             servicesContainer.style.transform = `translateY(2850px)`;
         }
