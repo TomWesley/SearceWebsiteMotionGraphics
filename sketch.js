@@ -616,34 +616,36 @@ function updateTextPosition() {
             // Calculate the vertical center of the canvas (where active cards appear)
             const canvasVerticalCenter = canvasHeight * 0.5;
             
-            // Calculate text positioning to center each service with its corresponding card
-            // Each service content div takes up 12.5% of the total container height (100% / 8 services)
-            const serviceHeight = servicesContainer.offsetHeight / 8;
-            const serviceCenterOffset = serviceHeight * 0.5; // Half of one service div height
+            // CORRECT DIRECTION: Text moves UP as you scroll DOWN through cards
+            // Use fixed service spacing for reliable positioning
+            const serviceSpacing = canvasHeight * 0.6; // 60% of canvas height per service
             
             let targetTextPosition;
             
             if (transitionProgress > 0 && currentServiceIndex < 7) {
                 // During transition between cards, smoothly transition text
-                const currentServiceTargetY = canvasVerticalCenter - serviceCenterOffset - (currentServiceIndex * serviceHeight);
-                const nextServiceTargetY = canvasVerticalCenter - serviceCenterOffset - (nextServiceIndex * serviceHeight);
+                // Text moves upward as service index increases
+                const currentServiceY = canvasVerticalCenter - (currentServiceIndex * serviceSpacing);
+                const nextServiceY = canvasVerticalCenter - (nextServiceIndex * serviceSpacing);
                 
                 // Smooth interpolation between service positions
                 const textTransitionSpeed = 2; // Matches card transition timing
                 const textProgress = Math.min(1, transitionProgress * textTransitionSpeed);
-                targetTextPosition = currentServiceTargetY + (nextServiceTargetY - currentServiceTargetY) * textProgress;
+                targetTextPosition = currentServiceY + (nextServiceY - currentServiceY) * textProgress;
             } else {
-                // Static position - center the current service with the canvas center
-                targetTextPosition = canvasVerticalCenter - serviceCenterOffset - (currentServiceIndex * serviceHeight);
+                // Static position - text moves up as you progress through services
+                // Service 0 (first) at center when scrollPosition = 1
+                // Service 1 moves up when scrollPosition = 2  
+                // Service 7 (last) at center when scrollPosition = 8
+                targetTextPosition = canvasVerticalCenter - (currentServiceIndex * serviceSpacing);
             }
             
             servicesContainer.style.transform = `translateY(${targetTextPosition}px)`;
         } else {
             // Show first service when just entering stacked state
             const canvasVerticalCenter = canvasHeight * 0.5;
-            const serviceHeight = servicesContainer.offsetHeight / 8;
-            const serviceCenterOffset = serviceHeight * 0.5;
-            const firstServicePosition = canvasVerticalCenter - serviceCenterOffset;
+            // First service (index 0) centered when entering
+            const firstServicePosition = canvasVerticalCenter;
             servicesContainer.style.transform = `translateY(${firstServicePosition}px)`;
         }
     } else {
