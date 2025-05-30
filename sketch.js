@@ -543,6 +543,9 @@ function draw() {
             } else if (currentState === ANIMATING_TO_GRID) {
                 currentState = GRID_STATE;
                 document.getElementById('service-overlay').classList.remove('active');
+                // Reset scroll position when back in grid state
+                scrollPosition = 0;
+                targetScrollPosition = 0;
             }
         }
     }
@@ -599,9 +602,10 @@ function updateContinuousScrolling() {
 }
 
 function updateTextPosition() {
-    if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
-        const servicesContainer = document.getElementById('services-container');
-        
+    const servicesContainer = document.getElementById('services-container');
+    
+    // Only allow text scrolling when fully in STACKED_STATE
+    if (currentState === STACKED_STATE) {
         if (scrollPosition >= 1) {
             // Calculate which service should be centered based on scroll position
             const scrollProgress = scrollPosition - 1; // 0-7 range
@@ -635,9 +639,16 @@ function updateTextPosition() {
             
             servicesContainer.style.transform = `translateY(${targetTextPosition}px)`;
         } else {
-            // When not in stack mode, position text off-screen or at default
-            servicesContainer.style.transform = `translateY(${canvasHeight + 100}px)`;
+            // Show first service when just entering stacked state
+            const canvasVerticalCenter = canvasHeight * 0.5;
+            const serviceHeight = servicesContainer.offsetHeight / 8;
+            const serviceCenterOffset = serviceHeight * 0.5;
+            const firstServicePosition = canvasVerticalCenter - serviceCenterOffset;
+            servicesContainer.style.transform = `translateY(${firstServicePosition}px)`;
         }
+    } else {
+        // In all other states (GRID, ANIMATING), hide text off-screen
+        servicesContainer.style.transform = `translateY(${canvasHeight + 100}px)`;
     }
 }
 
@@ -646,12 +657,21 @@ function handleWheel(event) {
     
     const scrollDelta = event.deltaY * scrollSensitivity;
     
-    // Update target position
-    targetScrollPosition += scrollDelta;
-    targetScrollPosition = Math.max(0, Math.min(8, targetScrollPosition));
-    
-    // Add some velocity for more natural feel
-    scrollVelocity += scrollDelta * 0.3;
+    // Handle scrolling based on current state
+    if (currentState === STACKED_STATE) {
+        // Allow full service navigation in stacked state
+        targetScrollPosition += scrollDelta;
+        targetScrollPosition = Math.max(0, Math.min(8, targetScrollPosition)); // Allow going back to grid (0) or through services (1-8)
+        scrollVelocity += scrollDelta * 0.3;
+    } else if (currentState === GRID_STATE && scrollDelta > 0) {
+        // Only allow forward scrolling to enter stack mode from grid
+        targetScrollPosition += scrollDelta;
+        targetScrollPosition = Math.max(0, Math.min(1, targetScrollPosition)); // Only allow 0-1 range
+        scrollVelocity += scrollDelta * 0.3;
+    } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
+        // Don't allow scrolling during animations
+        return;
+    }
     
     lastScrollTime = millis();
 }
@@ -719,8 +739,8 @@ function startTransformToGrid() {
     
     currentState = ANIMATING_TO_GRID;
     animationProgress = 0;
-    scrollPosition = 0;
-    targetScrollPosition = 0;
+    // Allow scrolling back to grid - don't force scroll position to 0 yet
+    // Let the state transition handle the scroll boundaries
     
     for (let card of cards) {
         card.rotation = 0;
