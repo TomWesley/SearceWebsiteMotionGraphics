@@ -335,7 +335,7 @@ class Card {
             rect(-this.currentSize/2, -this.currentSize/2, this.currentSize, this.currentSize, 12);
         }
         
-        // Card image
+        // Card image with enhanced drop shadows
         if (this.img) {
             const brightnessBoost = this.glowIntensity > 5 ? 1.05 : 1.0;
             tint(255 * brightnessBoost, this.alpha);
@@ -416,10 +416,10 @@ function updateAllCardsInStack() {
             card.x = baseX; // Always centered
             
             // Push back effect - each card moves progressively up and back
-            const pushBackDistance = sqrt(stackDepth) * (card.targetSize * 0.1); // Each card pushes back by 8% of card height
-            const verticalOffset = card.targetSize * 0.005; // Base offset to show the stack
+            const pushBackDistance = stackDepth * (card.targetSize * 0.04); // Each card pushes back by 8% of card height
+            const verticalOffset = card.targetSize * 0.007; // Base offset to show the stack
             
-            card.y =35+baseY - verticalOffset - pushBackDistance; // Move up and back progressively
+            card.y = baseY - verticalOffset - pushBackDistance; // Move up and back progressively
             
         } else {
             // THIS CARD HASN'T BEEN REACHED YET - hide it
@@ -602,32 +602,41 @@ function updateTextPosition() {
     if (currentState === STACKED_STATE || currentState === ANIMATING_TO_STACK) {
         const servicesContainer = document.getElementById('services-container');
         
-        // Improved text synchronization with smooth card transitions
         if (scrollPosition >= 1) {
-            // Calculate text position with smooth interpolation
+            // Calculate which service should be centered based on scroll position
             const scrollProgress = scrollPosition - 1; // 0-7 range
             const currentServiceIndex = Math.floor(scrollProgress);
             const nextServiceIndex = Math.min(7, currentServiceIndex + 1);
             const transitionProgress = scrollProgress - currentServiceIndex;
             
-            // Smooth text transition that matches card fade timing
-            let textPosition;
+            // Calculate the vertical center of the canvas (where active cards appear)
+            const canvasVerticalCenter = canvasHeight * 0.5;
+            
+            // Calculate text positioning to center each service with its corresponding card
+            // Each service content div takes up 12.5% of the total container height (100% / 8 services)
+            const serviceHeight = servicesContainer.offsetHeight / 8;
+            const serviceCenterOffset = serviceHeight * 0.5; // Half of one service div height
+            
+            let targetTextPosition;
+            
             if (transitionProgress > 0 && currentServiceIndex < 7) {
-                // During transition, move text smoothly between services
-                const textTransitionSpeed = 2; // Matches card fade speed
-                const textProgress = Math.min(1, transitionProgress * textTransitionSpeed);
+                // During transition between cards, smoothly transition text
+                const currentServiceTargetY = canvasVerticalCenter - serviceCenterOffset - (currentServiceIndex * serviceHeight);
+                const nextServiceTargetY = canvasVerticalCenter - serviceCenterOffset - (nextServiceIndex * serviceHeight);
                 
-                const currentPercent = -(currentServiceIndex * 12.5);
-                const nextPercent = -(nextServiceIndex * 12.5);
-                textPosition = currentPercent + (nextPercent - currentPercent) * textProgress;
+                // Smooth interpolation between service positions
+                const textTransitionSpeed = 2; // Matches card transition timing
+                const textProgress = Math.min(1, transitionProgress * textTransitionSpeed);
+                targetTextPosition = currentServiceTargetY + (nextServiceTargetY - currentServiceTargetY) * textProgress;
             } else {
-                // Static position when not transitioning
-                textPosition = -(currentServiceIndex * 12.5);
+                // Static position - center the current service with the canvas center
+                targetTextPosition = canvasVerticalCenter - serviceCenterOffset - (currentServiceIndex * serviceHeight);
             }
             
-            servicesContainer.style.transform = `translateY(calc(${textPosition}% + 2700px))`;
+            servicesContainer.style.transform = `translateY(${targetTextPosition}px)`;
         } else {
-            servicesContainer.style.transform = `translateY(2850px)`;
+            // When not in stack mode, position text off-screen or at default
+            servicesContainer.style.transform = `translateY(${canvasHeight + 100}px)`;
         }
     }
 }
