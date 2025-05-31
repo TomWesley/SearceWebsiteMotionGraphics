@@ -101,20 +101,21 @@ let scrollPosition = 0; // Continuous: 0 = grid, 1-8 = service cards
 let targetScrollPosition = 0;
 let scrollVelocity = 0;
 let lastScrollTime = 0;
-let scrollSensitivity = 0.005; // Slightly increased for better control with smooth fades
+let scrollSensitivity = 0.004; // Reduced for better mobile control
+let isMobile = false;
 
-// Responsive scaling variables
-let baseCardSize = 240;
-let baseTargetSize = 480;
+// Responsive scaling variables - REDUCED SIZES FOR BETTER RESOLUTION
+let baseCardSize = 180; // Reduced from 240 for better resolution
+let baseTargetSize = 320; // Reduced from 480 for better resolution
 let scaleFactor = 1;
 let sizeLimit = 1.2;
 
 function calculateScaleFactor() {
     const baseWidth = 1200;
     const rawScale = windowWidth / baseWidth;
-    scaleFactor = Math.max(0.6, Math.min(sizeLimit, rawScale));
-    baseCardSize = 240 * scaleFactor;
-    baseTargetSize = 480 * scaleFactor;
+    scaleFactor = Math.max(0.5, Math.min(sizeLimit, rawScale));
+    baseCardSize = 180 * scaleFactor;
+    baseTargetSize = 320 * scaleFactor;
 }
 
 // Smooth easing functions
@@ -161,7 +162,6 @@ class Card {
         } else if (currentState === ANIMATING_TO_GRID) {
             this.animateToGrid();
         }
-        // Removed updateInStack() call - now handled centrally
     }
     
     animateToStack() {
@@ -173,7 +173,7 @@ class Card {
             return;
         }
         
-        const baseX = width * 0.25;
+        const baseX = isMobile ? width * 0.5 : width * 0.25;
         const baseY = canvasHeight * 0.5;
         
         // ALL cards aim for the EXACT SAME position - perfect stack
@@ -215,7 +215,7 @@ class Card {
             return;
         }
         
-        const startStackX = width * 0.25;
+        const startStackX = isMobile ? width * 0.5 : width * 0.25;
         const startStackY = canvasHeight * 0.5;
         
         const t = easeInOutCubic(adjustedProgress);
@@ -370,10 +370,9 @@ class Card {
     }
 }
 
-// Central function to handle all 8 cards explicitly in stack mode
+// IMPROVED: Central function to handle all 8 cards with 3-card stack limit and fading
 function updateAllCardsInStack() {
-    // This method now handles ALL 8 cards explicitly
-    const baseX = width * 0.25;
+    const baseX = isMobile ? width * 0.5 : width * 0.25; // Center on mobile
     const baseY = canvasHeight * 0.5;
     
     // Calculate which card should be active
@@ -386,9 +385,9 @@ function updateAllCardsInStack() {
         activeCardIndex = Math.floor(scrollPosition - 1);
     }
     
-    // Process all 8 cards explicitly - creating the push-back effect
+    // Process all 8 cards explicitly - only show 3 cards max with fading
     for (let i = 0; i < 8; i++) {
-        const card = cards[i]; // Get the actual card object
+        const card = cards[i];
         
         if (i === activeCardIndex) {
             // THIS IS THE ACTIVE CARD - always at front center
@@ -401,25 +400,37 @@ function updateAllCardsInStack() {
             card.alpha = 255;
             
         } else if (i < activeCardIndex && scrollPosition > 1.1) {
-            // THIS CARD HAS BEEN PASSED - push it back in the stack
-            const stackDepth = activeCardIndex - i; // How far back this card should be (1, 2, 3, etc.)
+            // THIS CARD HAS BEEN PASSED - show only top 3 with fading
+            const stackDepth = activeCardIndex - i;
             
-            // Progressive scaling - each card gets smaller as it goes back
-            const scaleReduction = Math.pow(0.95, stackDepth); // Each card 5% smaller than the one in front
-            card.currentSize = card.targetSize * scaleReduction;
-            card.alpha = 255; // Keep full opacity
-            card.rotation = 0;
-            card.scale = 1.0;
-            card.elevation = Math.max(1, 12 - stackDepth);
-            
-            // CENTERED stacking - all cards stay centered horizontally
-            card.x = baseX; // Always centered
-            
-            // Push back effect - each card moves progressively up and back
-            const pushBackDistance = stackDepth * (card.targetSize * 0.04); // Each card pushes back by 8% of card height
-            const verticalOffset = card.targetSize * 0.007; // Base offset to show the stack
-            
-            card.y = baseY - verticalOffset - pushBackDistance; // Move up and back progressively
+            if (stackDepth <= 3) {
+                // Show this card as part of the visible stack
+                const scaleReduction = Math.pow(0.94, stackDepth);
+                card.currentSize = card.targetSize * scaleReduction;
+                
+                // IMPROVED: Fade opacity based on stack depth - only show 3 cards
+                let alphaMultiplier;
+                if (stackDepth === 1) alphaMultiplier = 0.8;
+                else if (stackDepth === 2) alphaMultiplier = 0.5;
+                else if (stackDepth === 3) alphaMultiplier = 0.25;
+                else alphaMultiplier = 0; // Hide cards beyond 3rd position
+                
+                card.alpha = 255 * alphaMultiplier;
+                card.rotation = 0;
+                card.scale = 1.0;
+                card.elevation = Math.max(1, 12 - stackDepth * 2);
+                
+                card.x = baseX;
+                const pushBackDistance = stackDepth * (card.targetSize * 0.035);
+                const verticalOffset = card.targetSize * 0.008;
+                card.y = baseY - verticalOffset - pushBackDistance;
+            } else {
+                // Hide cards beyond the 3rd position completely
+                card.alpha = 0;
+                card.x = baseX;
+                card.y = baseY;
+                card.elevation = 0;
+            }
             
         } else {
             // THIS CARD HASN'T BEEN REACHED YET - hide it
@@ -429,11 +440,6 @@ function updateAllCardsInStack() {
             card.currentSize = card.targetSize;
             card.elevation = 0;
         }
-    }
-    
-    // Debug: Log the state every second
-    if (frameCount % 60 === 0) {
-        console.log(`Active: ${activeCardIndex}, Visible stack cards: ${cards.filter(c => c.alpha > 0 && cards.indexOf(c) < activeCardIndex).length}`);
     }
 }
 
@@ -445,7 +451,10 @@ function preload() {
 }
 
 function setup() {
-    canvasHeight = window.innerHeight - 120;
+    // Detect mobile devices
+    isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || windowWidth < 768;
+    
+    canvasHeight = window.innerHeight - (isMobile ? (windowWidth < 480 ? 80 : 100) : 120);
     calculateScaleFactor();
     
     const canvas = createCanvas(windowWidth, canvasHeight);
@@ -454,10 +463,37 @@ function setup() {
     setupCardGrid();
     initializeServiceContent();
     
+    // Add both wheel and touch event listeners
     window.addEventListener('wheel', handleWheel, { passive: false });
     
+    // Mobile touch support
+    if (isMobile) {
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        
+        canvas.canvas.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            touchStartTime = millis();
+        }, { passive: true });
+        
+        canvas.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touchY = e.touches[0].clientY;
+            const deltaY = touchStartY - touchY;
+            const deltaTime = millis() - touchStartTime;
+            
+            if (deltaTime > 50) { // Throttle touch events
+                const scrollDelta = deltaY * 0.002; // Reduced sensitivity for touch
+                handleScrollDelta(scrollDelta);
+                touchStartY = touchY;
+                touchStartTime = millis();
+            }
+        }, { passive: false });
+    }
+    
     window.addEventListener('resize', () => {
-        canvasHeight = window.innerHeight - 120;
+        isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || windowWidth < 768;
+        canvasHeight = window.innerHeight - (isMobile ? (windowWidth < 480 ? 80 : 100) : 120);
         calculateScaleFactor();
         resizeCanvas(windowWidth, canvasHeight);
         setupCardGrid();
@@ -470,19 +506,39 @@ function setup() {
 
 function setupCardGrid() {
     cards = [];
-    const cardSpacing = 350 * scaleFactor;
-    const gridWidth = 4 * cardSpacing;
-    const gridHeight = 2 * cardSpacing;
-    const startX = width / 2 - gridWidth / 2 + cardSpacing / 2;
-    const startY = canvasHeight / 2 - gridHeight / 2 + cardSpacing / 2;
     
-    for (let i = 0; i < 8; i++) {
-        const row = Math.floor(i / 4);
-        const col = i % 4;
-        const x = startX + col * cardSpacing;
-        const y = startY + row * cardSpacing;
+    if (isMobile) {
+        // Mobile layout: 2x4 grid with tighter spacing
+        const cardSpacing = Math.min(280, windowWidth * 0.4) * scaleFactor;
+        const gridWidth = 2 * cardSpacing;
+        const gridHeight = 4 * cardSpacing;
+        const startX = width / 2 - gridWidth / 2 + cardSpacing / 2;
+        const startY = canvasHeight / 2 - gridHeight / 2 + cardSpacing / 2;
         
-        cards.push(new Card(x, y, cardImages[i], i));
+        for (let i = 0; i < 8; i++) {
+            const row = Math.floor(i / 2);
+            const col = i % 2;
+            const x = startX + col * cardSpacing;
+            const y = startY + row * cardSpacing;
+            
+            cards.push(new Card(x, y, cardImages[i], i));
+        }
+    } else {
+        // Desktop layout: 4x2 grid
+        const cardSpacing = 350 * scaleFactor;
+        const gridWidth = 4 * cardSpacing;
+        const gridHeight = 2 * cardSpacing;
+        const startX = width / 2 - gridWidth / 2 + cardSpacing / 2;
+        const startY = canvasHeight / 2 - gridHeight / 2 + cardSpacing / 2;
+        
+        for (let i = 0; i < 8; i++) {
+            const row = Math.floor(i / 4);
+            const col = i % 4;
+            const x = startX + col * cardSpacing;
+            const y = startY + row * cardSpacing;
+            
+            cards.push(new Card(x, y, cardImages[i], i));
+        }
     }
 }
 
@@ -601,74 +657,49 @@ function updateContinuousScrolling() {
     scrollVelocity *= 0.9;
 }
 
+// IMPROVED: Completely smooth text scrolling without discrete steps
 function updateTextPosition() {
     const servicesContainer = document.getElementById('services-container');
     
     // Only allow text scrolling when fully in STACKED_STATE
     if (currentState === STACKED_STATE) {
         if (scrollPosition >= 1) {
-            // Calculate which service should be centered based on scroll position
+            // IMPROVED: Smooth, continuous text scrolling based on exact scroll position
             const scrollProgress = scrollPosition - 1; // 0-7 range
-            const currentServiceIndex = Math.floor(scrollProgress);
-            const nextServiceIndex = Math.min(7, currentServiceIndex + 1);
-            const transitionProgress = scrollProgress - currentServiceIndex;
             
-            // Calculate the vertical center of the canvas (where active cards appear)
+            // Calculate the vertical center of the canvas
             const canvasVerticalCenter = canvasHeight * 0.5;
             
-            // CORRECT DIRECTION: Text moves UP as you scroll DOWN through cards
-            // Use fixed service spacing for reliable positioning
-            const serviceSpacing = canvasHeight * 0.6; // 60% of canvas height per service
+            // IMPROVED: Use continuous positioning - no discrete steps
+            const serviceSpacing = canvasHeight * 0.6;
             
-            let targetTextPosition;
-            
-            if (transitionProgress > 0 && currentServiceIndex < 7) {
-                // During transition between cards, smoothly transition text
-                // Text moves upward as service index increases
-                const currentServiceY = canvasVerticalCenter - (currentServiceIndex * serviceSpacing);
-                const nextServiceY = canvasVerticalCenter - (nextServiceIndex * serviceSpacing);
-                
-                // Smooth interpolation between service positions
-                const textTransitionSpeed = 2; // Matches card transition timing
-                const textProgress = Math.min(1, transitionProgress * textTransitionSpeed);
-                targetTextPosition = currentServiceY + (nextServiceY - currentServiceY) * textProgress;
-            } else {
-                // Static position - text moves up as you progress through services
-                // Service 0 (first) at center when scrollPosition = 1
-                // Service 1 moves up when scrollPosition = 2  
-                // Service 7 (last) at center when scrollPosition = 8
-                targetTextPosition = canvasVerticalCenter - (currentServiceIndex * serviceSpacing);
-            }
+            // IMPROVED: Continuous text movement - directly proportional to scroll
+            // Text moves UP as scrollProgress increases (inverse relationship)
+            const targetTextPosition = canvasVerticalCenter - (scrollProgress * serviceSpacing);
             
             servicesContainer.style.transform = `translateY(${targetTextPosition}px)`;
         } else {
             // Show first service when just entering stacked state
             const canvasVerticalCenter = canvasHeight * 0.5;
-            // First service (index 0) centered when entering
-            const firstServicePosition = canvasVerticalCenter;
-            servicesContainer.style.transform = `translateY(${firstServicePosition}px)`;
+            servicesContainer.style.transform = `translateY(${canvasVerticalCenter}px)`;
         }
     } else {
-        // In all other states (GRID, ANIMATING), hide text off-screen
+        // In all other states, hide text off-screen
         servicesContainer.style.transform = `translateY(${canvasHeight + 100}px)`;
     }
 }
 
-function handleWheel(event) {
-    event.preventDefault();
-    
-    const scrollDelta = event.deltaY * scrollSensitivity;
-    
+function handleScrollDelta(scrollDelta) {
     // Handle scrolling based on current state
     if (currentState === STACKED_STATE) {
         // Allow full service navigation in stacked state
         targetScrollPosition += scrollDelta;
-        targetScrollPosition = Math.max(0, Math.min(8, targetScrollPosition)); // Allow going back to grid (0) or through services (1-8)
+        targetScrollPosition = Math.max(0, Math.min(8, targetScrollPosition));
         scrollVelocity += scrollDelta * 0.3;
     } else if (currentState === GRID_STATE && scrollDelta > 0) {
         // Only allow forward scrolling to enter stack mode from grid
         targetScrollPosition += scrollDelta;
-        targetScrollPosition = Math.max(0, Math.min(1, targetScrollPosition)); // Only allow 0-1 range
+        targetScrollPosition = Math.max(0, Math.min(1, targetScrollPosition));
         scrollVelocity += scrollDelta * 0.3;
     } else if (currentState === ANIMATING_TO_STACK || currentState === ANIMATING_TO_GRID) {
         // Don't allow scrolling during animations
@@ -676,6 +707,13 @@ function handleWheel(event) {
     }
     
     lastScrollTime = millis();
+}
+
+function handleWheel(event) {
+    event.preventDefault();
+    
+    const scrollDelta = event.deltaY * scrollSensitivity;
+    handleScrollDelta(scrollDelta);
 }
 
 function drawPremiumBackground() {
@@ -713,7 +751,7 @@ function drawAmbientParticles() {
     
     for (let i = 0; i < particleCount; i++) {
         const time = millis() * 0.0008 + i * 0.4;
-        const x = width * 0.25 + Math.sin(time * 0.7) * 80;
+        const x = (isMobile ? width * 0.5 : width * 0.25) + Math.sin(time * 0.7) * 80;
         const y = canvasHeight * 0.5 + Math.cos(time * 0.5) * 60;
         const size = 2 + Math.sin(time * 1.5) * 0.8;
         
@@ -741,8 +779,6 @@ function startTransformToGrid() {
     
     currentState = ANIMATING_TO_GRID;
     animationProgress = 0;
-    // Allow scrolling back to grid - don't force scroll position to 0 yet
-    // Let the state transition handle the scroll boundaries
     
     for (let card of cards) {
         card.rotation = 0;
@@ -760,7 +796,8 @@ function updateScrollIndicator() {
 }
 
 function windowResized() {
-    canvasHeight = window.innerHeight - 120;
+    isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || windowWidth < 768;
+    canvasHeight = window.innerHeight - (isMobile ? (windowWidth < 480 ? 80 : 100) : 120);
     calculateScaleFactor();
     resizeCanvas(windowWidth, canvasHeight);
     setupCardGrid();
